@@ -35,6 +35,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   Timer? _loopTimer;
   DeviceManagerNotifier? _cachedManager;
   int _selectedBaudIndex = 4; // 115200
+  bool _useCustomBaud = false;
+  int _customBaudRate = 115200;
   int _selectedDataBitsIndex = 3; // 8
   int _selectedStopBitsIndex = 0; // 1
   int _selectedParityIndex = 0; // 0=none
@@ -98,7 +100,14 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     final uartExtra = _parseUartExtraFromStatusAck(p);
     if (mounted) {
       setState(() {
-        _selectedBaudIndex = idx >= 0 ? idx : 4;
+        if (idx >= 0) {
+          _selectedBaudIndex = idx;
+          _useCustomBaud = false;
+        } else {
+          _useCustomBaud = true;
+          _customBaudRate = baud;
+          _selectedBaudIndex = 0;
+        }
         _workMode = workMode == 1 ? 1 : 0;
         _hasFetchedBaud = true;
         if (uartExtra != null) {
@@ -218,6 +227,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   }
 
   static const List<int> _baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
+  static const int _minCustomBaud = 300;
+  static const int _maxCustomBaud = 2000000;
   static const List<int> _dataBitsOptions = [5, 6, 7, 8];
   static const List<int> _stopBitsOptions = [1, 2];
   static const List<(int value, String label)> _parityOptions = [(0, '无'), (1, '奇'), (2, '偶')];
@@ -423,10 +434,27 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               DropdownButton<int>(
-                value: _selectedBaudIndex < _baudRates.length ? _baudRates[_selectedBaudIndex] : 115200,
-                items: _baudRates.map((b) => DropdownMenuItem(value: b, child: Text('$b'))).toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _selectedBaudIndex = _baudRates.indexOf(v));
+                value: _useCustomBaud ? -1 : (_selectedBaudIndex < _baudRates.length ? _baudRates[_selectedBaudIndex] : 115200),
+                items: [
+                  ..._baudRates.map((b) => DropdownMenuItem(value: b, child: Text('$b'))),
+                  DropdownMenuItem(value: -1, child: Text('自定义 (${_customBaudRate})')),
+                ],
+                onChanged: (v) async {
+                  if (v == null) return;
+                  if (v == -1) {
+                    final result = await _showCustomBaudDialog(context);
+                    if (result != null && mounted) {
+                      setState(() {
+                        _customBaudRate = result;
+                        _useCustomBaud = true;
+                      });
+                    }
+                  } else {
+                    setState(() {
+                      _useCustomBaud = false;
+                      _selectedBaudIndex = _baudRates.indexOf(v);
+                    });
+                  }
                 },
               ),
               DropdownButton<int>(
@@ -455,7 +483,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                   final device = ref.read(currentDeviceProvider);
                   final manager = ref.read(deviceManagerProvider.notifier);
                   if (device == null) return;
-                  final baud = _baudRates[_selectedBaudIndex];
+                  final baud = _useCustomBaud ? _customBaudRate : _baudRates[_selectedBaudIndex.clamp(0, _baudRates.length - 1)];
                   final dataBits = _dataBitsOptions[_selectedDataBitsIndex.clamp(0, _dataBitsOptions.length - 1)];
                   final stopBits = _stopBitsOptions[_selectedStopBitsIndex.clamp(0, _stopBitsOptions.length - 1)];
                   final parity = _parityOptions[_selectedParityIndex.clamp(0, _parityOptions.length - 1)].$1;
@@ -766,6 +794,47 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
     return true;
+  }
+
+  /// Shows a dialog to enter custom baud rate. Returns the value (clamped to [_minCustomBaud, _maxCustomBaud]) or null on cancel.
+  Future<int?> _showCustomBaudDialog(BuildContext context) async {
+    final controller = TextEditingController(text: '$_customBaudRate');
+    String? errorText;
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('自定义波特率'),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: '波特率',
+                hintText: '$_minCustomBaud ~ $_maxCustomBaud',
+                errorText: errorText,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) => setDialogState(() => errorText = null),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
+              FilledButton(
+                onPressed: () {
+                  final v = int.tryParse(controller.text.trim());
+                  if (v == null || v < _minCustomBaud || v > _maxCustomBaud) {
+                    setDialogState(() => errorText = '请输入 $_minCustomBaud ~ $_maxCustomBaud 之间的整数');
+                    return;
+                  }
+                  Navigator.of(ctx).pop(v.clamp(_minCustomBaud, _maxCustomBaud));
+                },
+                child: const Text('确定'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _doSend(DeviceManagerNotifier manager) {
