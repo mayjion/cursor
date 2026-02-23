@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../channel/device_channel.dart';
@@ -5,52 +6,76 @@ import '../protocol/frame.dart';
 import '../protocol/frame_codec.dart';
 import 'device_type.dart';
 
+/// Max payload length to avoid malicious or corrupted LEN (e.g. 0xFFFF).
+const int _kMaxPayloadLen = 2048;
+
 /// Base device: id, name, type, channel; send(Frame) and onFrame stream.
+/// onFrame is a broadcast stream so multiple listeners (e.g. scan ACK + panel RX) can subscribe.
 abstract class BaseDevice {
+  BaseDevice() {
+    // Lazy init of frame decoder in _ensureFrameDecoderStarted() when onFrame is first accessed.
+  }
+
   String get id;
   String get name;
   DeviceType get type;
   DeviceChannel get channel;
 
   Future<void> connect() => channel.connect();
-  Future<void> disconnect() => channel.disconnect();
+
+  Future<void> disconnect() async {
+    await _frameChannelSub?.cancel();
+    _frameChannelSub = null;
+    await _frameController?.close();
+    _frameController = null;
+    _frameBuffer.clear();
+    await channel.disconnect();
+  }
+
   bool get isConnected => channel.isConnected;
 
   /// Send a Frame (encoded to bytes via FrameCodec).
   Future<void> send(Frame frame) => channel.send(FrameCodec.encode(frame));
 
+  StreamController<Frame>? _frameController;
+  StreamSubscription<Uint8List>? _frameChannelSub;
+  final List<int> _frameBuffer = [];
+
   /// Stream of decoded Frames from channel data (SOF-framed, CRC-validated).
-  Stream<Frame> get onFrame => _frameStream;
+  /// Broadcast: multiple listeners allowed (scan ACK, serial panel RX, etc.).
+  Stream<Frame> get onFrame {
+    _ensureFrameDecoderStarted();
+    return _frameController!.stream;
+  }
 
-  /// Max payload length to avoid malicious or corrupted LEN (e.g. 0xFFFF).
-  static const int _maxPayloadLen = 2048;
-
-  Stream<Frame> get _frameStream async* {
-    final buffer = <int>[];
-    await for (final chunk in channel.onData) {
-      buffer.addAll(chunk);
-      while (buffer.length >= FrameCodec.minFrameLength) {
-        // Only accept SOF at start; do not use indexOf(SOF) so payload containing 0xAA won't be treated as next frame.
-        if (buffer[0] != Frame.sof) {
-          buffer.removeAt(0);
+  void _ensureFrameDecoderStarted() {
+    if (_frameController != null) return;
+    _frameController = StreamController<Frame>.broadcast();
+    _frameChannelSub = channel.onData.listen((chunk) {
+      _frameBuffer.addAll(chunk);
+      while (_frameBuffer.length >= FrameCodec.minFrameLength) {
+        if (_frameBuffer[0] != Frame.sof) {
+          _frameBuffer.removeAt(0);
           continue;
         }
-        final len = buffer[4] | (buffer[5] << 8);
+        final len = _frameBuffer[4] | (_frameBuffer[5] << 8);
         final frameLen = FrameCodec.headerLength + len + FrameCodec.crcLength;
-        if (len > _maxPayloadLen || buffer.length < frameLen) {
-          if (buffer.length < frameLen) break;
-          buffer.removeAt(0);
+        if (len > _kMaxPayloadLen || _frameBuffer.length < frameLen) {
+          if (_frameBuffer.length < frameLen) break;
+          _frameBuffer.removeAt(0);
           continue;
         }
-        final bytes = Uint8List.fromList(buffer.take(frameLen).toList());
-        buffer.removeRange(0, frameLen);
+        final bytes = Uint8List.fromList(_frameBuffer.take(frameLen).toList());
+        _frameBuffer.removeRange(0, frameLen);
         final frame = FrameCodec.decode(bytes);
         if (frame != null) {
-          yield frame;
+          if (!_frameController!.isClosed) {
+            _frameController!.add(frame);
+          }
         } else {
-          buffer.removeAt(0);
+          _frameBuffer.removeAt(0);
         }
       }
-    }
+    });
   }
 }

@@ -9,7 +9,7 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>本应用需要蓝牙以扫描和连接 BLE 设备（Service 0xFE01）。</string>
 	<key>CFBundleDisplayName</key>
-	<string>Iot Serial App</string>
+	<string>FUN智能</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>iot_serial_app</string>
+	<string>FUN智能</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
