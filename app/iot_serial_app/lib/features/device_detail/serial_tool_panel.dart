@@ -47,6 +47,10 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   /// Last sent data payload + time; used to filter BLE write echo (some Android stacks deliver own write as notification).
   Uint8List? _lastSentPayload;
   DateTime? _lastSentAt;
+  /// Peer list from device (CMD_PEER_LIST). Updated by "刷新 Peer 列表".
+  List<({String mac, int channel})> _peerList = [];
+  bool _peerListLoading = false;
+  String? _peerListError;
 
   int get _rxByteCount => _rxPackets.fold<int>(0, (s, p) => s + p.$2.length);
 
@@ -73,6 +77,28 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     final stopBits = payload[baudOffset + 5];
     final parity = payload[baudOffset + 6];
     return (dataBits, stopBits, parity);
+  }
+
+  /// Parse WiFi MAC from status query ACK bytes [3..8]. Returns null if payload.length < 10 (unified with plan).
+  static String? _parseWifiMacFromStatusAck(Uint8List payload) {
+    if (payload.length < 10) return null;
+    return '${payload[3].toRadixString(16).padLeft(2, '0')}:${payload[4].toRadixString(16).padLeft(2, '0')}:${payload[5].toRadixString(16).padLeft(2, '0')}:${payload[6].toRadixString(16).padLeft(2, '0')}:${payload[7].toRadixString(16).padLeft(2, '0')}:${payload[8].toRadixString(16).padLeft(2, '0')}';
+  }
+
+  /// Parse peer list from CMD_PEER_LIST ACK. Payload: [0]=status, [1]=count, [2..]= N x (6B MAC + 1B channel).
+  /// Device must always return at least status+count (empty list: count=0). Returns null if status != ok or length invalid.
+  static List<({String mac, int channel})>? _parsePeerListFromAck(Uint8List payload) {
+    if (payload.isEmpty || payload[0] != AckStatus.ok) return null;
+    if (payload.length == 1) return []; /* device sent only status: treat as empty list */
+    final count = payload[1].clamp(0, 10);
+    if (payload.length < 2 + count * 7) return null;
+    final list = <({String mac, int channel})>[];
+    for (int i = 0; i < count; i++) {
+      final off = 2 + i * 7;
+      final mac = '${payload[off].toRadixString(16).padLeft(2, '0')}:${payload[off + 1].toRadixString(16).padLeft(2, '0')}:${payload[off + 2].toRadixString(16).padLeft(2, '0')}:${payload[off + 3].toRadixString(16).padLeft(2, '0')}:${payload[off + 4].toRadixString(16).padLeft(2, '0')}:${payload[off + 5].toRadixString(16).padLeft(2, '0')}';
+      list.add((mac: mac, channel: payload[off + 6]));
+    }
+    return list;
   }
 
   /// Fetch device state (baud + work mode) and update UI. Sets _hasFetchedBaud only on success so failure can retry.
@@ -119,6 +145,14 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
           if (pi >= 0) _selectedParityIndex = pi;
         }
       });
+    }
+    // Fallback: write back current device WiFi MAC from status ACK so saved device has wifiMac (e.g. old firmware / already-saved device).
+    final wifiMac = _parseWifiMacFromStatusAck(p);
+    if (wifiMac != null && wifiMac.isNotEmpty) {
+      final entity = await DeviceStorage.get(device.id);
+      if (entity != null) {
+        await DeviceStorage.save(entity.copyWith(wifiMac: wifiMac));
+      }
     }
     return true;
   }
@@ -225,6 +259,39 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     );
     return result;
   }
+
+  /// Fetch peer list from device (CMD_PEER_LIST) and update _peerList, _peerListLoading, _peerListError.
+  Future<void> _fetchPeerList(BaseDevice device, DeviceManagerNotifier manager) async {
+    if (_peerListLoading) return;
+    setState(() {
+      _peerListLoading = true;
+      _peerListError = null;
+    });
+    final ack = await _sendControlAndWaitAck(device, manager, Frame(
+      type: FrameType.control,
+      cmd: FrameCmd.peerList,
+      seq: manager.nextSeq(),
+      payload: Uint8List(0),
+    ));
+    if (!mounted) return;
+    setState(() {
+      _peerListLoading = false;
+      if (ack == null || ack.payload.isEmpty) {
+        _peerListError = '刷新失败或超时';
+        _peerList = [];
+      } else {
+        final list = _parsePeerListFromAck(ack.payload);
+        if (list != null) {
+          _peerList = list;
+          _peerListError = null;
+        } else {
+          _peerListError = '解析失败';
+          _peerList = [];
+        }
+      }
+    });
+  }
+
 
   static const List<int> _baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
   static const int _minCustomBaud = 300;
@@ -518,27 +585,62 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                 },
                 child: const Text('应用'),
               ),
+              FilledButton.tonal(
+                onPressed: () async {
+                  final ok = await _fetchAndSetDeviceState(device, manager);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok ? '已刷新波特率与工作模式' : '刷新失败或超时'),
+                    ));
+                  }
+                },
+                child: const Text('刷新'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           const Text('工作模式', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SegmentedButton<int>(
                 segments: const [
                   ButtonSegment(value: 0, label: Text('BLE')),
-                  ButtonSegment(value: 1, label: Text('ESP-NOW 仅')),
+                  ButtonSegment(value: 1, label: Text('ESP-NOW')),
                 ],
                 selected: {_workMode},
                 onSelectionChanged: (s) => setState(() => _workMode = s.first),
               ),
-              const SizedBox(width: 12),
               FilledButton.tonal(
                 onPressed: () async {
                   final device = ref.read(currentDeviceProvider);
                   final manager = ref.read(deviceManagerProvider.notifier);
                   if (device == null) return;
+                  if (_workMode == 1) {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('切换至 ESP-NOW 模式'),
+                        content: const Text(
+                          '切换后 BLE 将无法搜索到该设备，需通过恢复出厂设置才能重新使用 BLE 模式。是否继续？',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('继续'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (!mounted || confirmed != true) return;
+                  }
                   final seq = manager.nextSeq();
                   final ack = await _sendControlAndWaitAck(device, manager, Frame(
                     type: FrameType.control,
@@ -564,34 +666,56 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
             runSpacing: 8,
             children: [
               FilledButton.tonal(
-                onPressed: () async {
-                  final ok = await _fetchAndSetDeviceState(device, manager);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok ? '已刷新波特率与工作模式' : '刷新失败或超时'),
-                    ));
-                  }
-                },
-                child: const Text('刷新'),
-              ),
-              FilledButton.tonal(
-                onPressed: () => _showStatusQuery(context, device, manager),
-                child: const Text('状态查询'),
-              ),
-              FilledButton.tonal(
-                onPressed: () => _showPeerAddDialog(context, device, manager),
+                onPressed: _peerListLoading ? null : () => _showPeerAddDialog(context, device, manager),
                 child: const Text('添加 Peer'),
               ),
               FilledButton.tonal(
-                onPressed: () => _showPeerRemoveDialog(context, device, manager),
-                child: const Text('删除 Peer'),
-              ),
-              FilledButton.tonal(
-                onPressed: () => _clearAllPeers(context, device, manager),
-                child: const Text('清空全部'),
+                onPressed: _peerListLoading ? null : () => _fetchPeerList(device, manager),
+                child: _peerListLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('刷新 Peer 列表'),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          if (_peerListError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(_peerListError!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13)),
+            ),
+          if (_peerListLoading && _peerList.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: Text('正在加载…', style: TextStyle(fontSize: 13))),
+            )
+          else if (_peerList.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text('暂无已添加 Peer，点击「刷新 Peer 列表」获取', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            )
+          else
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _peerList.length,
+                itemBuilder: (context, index) {
+                  final entry = _peerList[index];
+                  return ListTile(
+                    title: Text('${entry.mac} (信道 ${entry.channel})', style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: '删除',
+                      onPressed: () => _removePeerFromList(context, device, manager, entry.mac, index),
+                    ),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -614,10 +738,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     // [0]=status, [1]=ble_connected, [2]=has_peer, [3..8]=wifi_mac(6), [9]=work_mode
     final bleConnected = p.length > 1 && p[1] == 1;
     final hasPeer = p.length > 2 && p[2] == 1;
-    String wifiMac = '';
-    if (p.length >= 9) {
-      wifiMac = '${p[3].toRadixString(16).padLeft(2, '0')}:${p[4].toRadixString(16).padLeft(2, '0')}:${p[5].toRadixString(16).padLeft(2, '0')}:${p[6].toRadixString(16).padLeft(2, '0')}:${p[7].toRadixString(16).padLeft(2, '0')}:${p[8].toRadixString(16).padLeft(2, '0')}';
-    }
+    final wifiMac = _parseWifiMacFromStatusAck(p) ?? '';
     final workMode = p.length > 9 ? p[9] : 0;
     showDialog(
       context: context,
@@ -753,6 +874,34 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     if (!context.mounted) return;
     final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Peer 已添加' : '添加失败')));
+    if (ok) _fetchPeerList(device, manager);
+  }
+
+  /// Remove one peer from device and from _peerList by MAC. Called from list row delete button.
+  Future<void> _removePeerFromList(BuildContext context, BaseDevice device, DeviceManagerNotifier manager, String macStr, int index) async {
+    final macBytes = _parseMacString(macStr);
+    if (macBytes == null || macBytes.length != 6) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MAC 格式无效')));
+      return;
+    }
+    final ack = await _sendControlAndWaitAck(device, manager, Frame(
+      type: FrameType.control,
+      cmd: FrameCmd.peerRemove,
+      seq: manager.nextSeq(),
+      payload: Uint8List.fromList(macBytes),
+    ));
+    if (!context.mounted) return;
+    final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
+    if (ok) {
+      setState(() {
+        if (index >= 0 && index < _peerList.length && _peerList[index].mac == macStr) {
+          _peerList = List.from(_peerList)..removeAt(index);
+        }
+      });
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Peer 已删除')));
+    } else {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('删除失败')));
+    }
   }
 
   Future<void> _showPeerRemoveDialog(BuildContext context, BaseDevice device, DeviceManagerNotifier manager) async {

@@ -23,9 +23,20 @@ String _parseDeviceTypeFromStatusAck(Uint8List payload) {
   return utf8.decode(payload.sublist(11, 11 + len));
 }
 
-/// Parse WiFi MAC from status query ACK bytes [3..8]. Returns null if length < 9.
+/// Manufacturer Company ID for WiFi MAC in BLE advertisement (0xFE01).
+const int _mfgCompanyIdWifiMac = 0xFE01;
+
+/// Parse WiFi MAC from BLE manufacturer data (0xFE01). Value is 6 bytes. Returns null if missing or too short.
+String? _parseWifiMacFromManufacturerData(Map<int, List<int>>? manufacturerData) {
+  if (manufacturerData == null) return null;
+  final data = manufacturerData[_mfgCompanyIdWifiMac];
+  if (data == null || data.length < 6) return null;
+  return '${data[0].toRadixString(16).padLeft(2, '0')}:${data[1].toRadixString(16).padLeft(2, '0')}:${data[2].toRadixString(16).padLeft(2, '0')}:${data[3].toRadixString(16).padLeft(2, '0')}:${data[4].toRadixString(16).padLeft(2, '0')}:${data[5].toRadixString(16).padLeft(2, '0')}';
+}
+
+/// Parse WiFi MAC from status query ACK bytes [3..8]. Returns null if length < 10 (unified with plan).
 String? _parseWifiMacFromStatusAck(Uint8List payload) {
-  if (payload.length < 9) return null;
+  if (payload.length < 10) return null;
   return '${payload[3].toRadixString(16).padLeft(2, '0')}:${payload[4].toRadixString(16).padLeft(2, '0')}:${payload[5].toRadixString(16).padLeft(2, '0')}:${payload[6].toRadixString(16).padLeft(2, '0')}:${payload[7].toRadixString(16).padLeft(2, '0')}:${payload[8].toRadixString(16).padLeft(2, '0')}';
 }
 
@@ -90,6 +101,8 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen> {
     setState(() => _scanning = false);
 
     final device = scanResult.device;
+    final wifiMacFromAdv = _parseWifiMacFromManufacturerData(scanResult.advertisementData.manufacturerData);
+
     try {
       final bleDevice = BleDevice(bleDevice: device);
       await bleDevice.connect();
@@ -119,14 +132,15 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen> {
       } finally {
         await sub.cancel();
       }
-      String? wifiMac;
+      String? wifiMacFromStatusQuery;
       if (ack != null && ack.isNotEmpty && ack.length >= 11) {
         final status = ack[0];
         if (status == AckStatus.ok) {
           deviceType = _parseDeviceTypeFromStatusAck(ack);
         }
-        wifiMac = _parseWifiMacFromStatusAck(ack);
+        wifiMacFromStatusQuery = _parseWifiMacFromStatusAck(ack);
       }
+      final wifiMac = wifiMacFromAdv ?? wifiMacFromStatusQuery;
 
       final name = device.platformName.isNotEmpty
           ? device.platformName

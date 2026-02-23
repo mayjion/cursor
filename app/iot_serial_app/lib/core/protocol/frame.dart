@@ -22,6 +22,7 @@ class FrameCmd {
   static const int setWorkMode = 0x07;
   static const int clearAllPeers = 0x08;
   static const int setDeviceName = 0x09;
+  static const int peerList = 0x0A;
 }
 
 /// ACK status codes.
