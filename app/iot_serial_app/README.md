@@ -1,0 +1,63 @@
+# IoT Serial App
+
+Flutter 物联网串口 APP，与 ESP-NOW 无线串口固件协议对齐。Phase 1 实现 BLE 本地模式：设备卡片列表、点击连接进入设备面板、BLE 串口工具面板（串口配置、接收/发送数据框、循环发送、HEX/字符串显示）。
+
+## 目录结构
+
+```
+lib/
+├── core/
+│   ├── protocol/     # Frame 协议：frame.dart, frame_codec.dart, crc16.dart
+│   ├── channel/      # DeviceChannel 抽象
+│   ├── device/       # BaseDevice, DeviceType, DeviceManager
+│   ├── storage/      # 本地设备列表（Hive）：device_entity.dart, device_storage.dart
+│   └── automation/   # 预留（Phase 2+）
+├── modules/
+│   ├── ble/          # BleChannel, BleDevice, BLE 扫描/连接（Service 0xFE01, Characteristic 0xFF06）
+│   ├── wifi/         # 预留（Phase 2）
+│   └── gateway/      # 预留（Phase 3+）
+├── features/
+│   ├── device_list/  # 设备列表：设备卡片（一设备一卡）、下拉扫描、长按删除
+│   ├── device_detail/# 设备面板（按类型）：BLE 串口工具面板 serial_tool_panel
+│   ├── terminal/     # 串口终端（可选入口）
+│   └── settings/     # 设置、关于、BLE 权限说明
+├── app_router.dart   # go_router 路由
+└── main.dart
+```
+
+## 运行方式
+
+- 在项目根目录执行：`flutter run`
+- 需真机或模拟器开启蓝牙；Android 需 BLUETOOTH_SCAN/CONNECT 等权限，iOS 需 NSBluetoothAlwaysUsageDescription
+
+## 与固件协议对齐
+
+- **SOF** = 0xAA
+- **CRC**：范围 TYPE～PAYLOAD，算法 CRC-16-CCITT（0x1021, 0xFFFF），结果小端
+- **BLE**：Service 0xFE01，Characteristic 0xFF06（Notify + Write），仅完整 Frame 二进制
+- **控制 CMD**：0x01 添加 Peer、0x02 删除 Peer、0x03 UART 配置（15 字节）、0x06 状态查询
+- **UART 配置**：payload 固定 15 字节小端（baud_rate, data_bits, stop_bits, parity, tx_pin, rx_pin）
+- **ACK**：TYPE=0x03，status 0x00～0x03
+- **数据透传**：TYPE=0x01、CMD=0x00，payload 为原始字节
+
+## 交互与界面（与设计文档一致）
+
+- **设备列表**：以**设备卡片**展示，一个设备一张卡片；已保存设备 + 附近设备（BLE 扫描，Service 0xFE01）；长按已保存卡片可删除。
+- **点击设备卡片**：建立连接（BLE）后进入**设备面板**；根据设备类型展示不同面板（Phase 1 仅 BLE）。
+- **BLE 串口工具面板**：串口配置（可折叠）、接收数据框（HEX/字符串、清屏）、发送数据框（HEX/字符串解析）、循环发送（周期 100～5000 ms）。
+
+详见 [work/doc/Flutter物联网APP开发设计文档.md](../doc/Flutter物联网APP开发设计文档.md) 第六、七、九章；协议对齐见 [CHECKLIST.md](CHECKLIST.md)。
+
+## 后续扩展
+
+- **Phase 2**：WiFi（TCP/MQTT 通道、配网）— `modules/wifi` 预留
+- **Phase 3**：网关、子设备模型 — `modules/gateway` 预留
+- **Phase 4**：自动化规则 — `core/automation` 预留
+
+## 依赖
+
+- flutter_blue_plus：BLE
+- hive / hive_flutter：本地存储
+- flutter_riverpod：状态管理
+- go_router：路由
+- permission_handler：权限
