@@ -285,34 +285,19 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
         children: [
           const Text('串口工具', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          // Receive area: byte count on first row to avoid overflow; controls on second row
+          // Receive area: byte count + 清空/保存 on first row; 字符串/HEX/时间戳 on second row
           Row(
             children: [
               Text(
                 '接收 ($_rxByteCount 字节)',
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('字符串')),
-                  ButtonSegment(value: true, label: Text('HEX')),
-                ],
-                selected: {_rxHexMode},
-                onSelectionChanged: (s) => setState(() => _rxHexMode = s.first),
-              ),
-              FilterChip(
-                label: const Text('时间戳'),
-                selected: _showTimestamp,
-                onSelected: (v) => setState(() => _showTimestamp = v),
-              ),
+              const Spacer(),
               FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
                 onPressed: _rxPackets.isEmpty && _txByteCount == 0
                     ? null
                     : () => setState(() {
@@ -321,15 +306,46 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                         }),
                 child: const Text('清空'),
               ),
+              const SizedBox(width: 8),
               FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
                 onPressed: _rxPackets.isEmpty ? null : () => Share.share(_rxContentToSave(_rxHexMode), subject: '串口接收数据'),
                 child: const Text('保存'),
               ),
             ],
           ),
           const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              SegmentedButton<bool>(
+                style: SegmentedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('字符串')),
+                  ButtonSegment(value: true, label: Text('HEX')),
+                ],
+                selected: {_rxHexMode},
+                onSelectionChanged: (s) => setState(() => _rxHexMode = s.first),
+              ),
+              FilterChip(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                label: const Text('时间戳'),
+                selected: _showTimestamp,
+                onSelected: (v) => setState(() => _showTimestamp = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Container(
-            height: 160,
+            height: 240,
             decoration: BoxDecoration(
               border: Border.all(color: Theme.of(context).dividerColor),
               borderRadius: BorderRadius.circular(8),

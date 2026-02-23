@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class MainShell extends StatelessWidget {
+import '../../core/settings/app_strings.dart';
+
+class MainShell extends ConsumerWidget {
   const MainShell({
     super.key,
     required this.navigationShell,
@@ -10,7 +13,8 @@ class MainShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
@@ -33,22 +37,22 @@ class MainShell extends StatelessWidget {
           }
         },
         type: BottomNavigationBarType.fixed,
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.devices),
-            label: '设备',
+            icon: const Icon(Icons.devices),
+            label: strings.navDevices,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.group),
-            label: '群组',
+            icon: const Icon(Icons.group),
+            label: strings.navGroups,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.auto_awesome),
-            label: '自动化',
+            icon: const Icon(Icons.auto_awesome),
+            label: strings.navAutomation,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: '设置',
+            icon: const Icon(Icons.settings),
+            label: strings.navSettings,
           ),
         ],
       ),
