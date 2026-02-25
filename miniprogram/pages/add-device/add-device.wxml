@@ -1,0 +1,40 @@
+<view class="container">
+
+<view class="header">
+  <text>添加新设备</text>
+</view>
+
+<!-- 扫码入口 -->
+<button type="primary" bindtap="scanQrCode" size="large" style="margin: 40rpx;">
+  扫一扫二维码添加
+</button>
+
+<!-- 手动输入 -->
+<view class="manual-input">
+  <text class="tip">或手动输入设备信息</text>
+
+  <input 
+    placeholder="产品ID (productId)" 
+    value="{{productId}}" 
+    bindinput="onProductIdInput"
+    style="border:1rpx solid #ddd; padding:20rpx; margin:20rpx 0;"
+  />
+
+  <input 
+    placeholder="设备名称 (deviceName 或 MAC)" 
+    value="{{deviceName}}" 
+    bindinput="onDeviceNameInput"
+    style="border:1rpx solid #ddd; padding:20rpx; margin:20rpx 0;"
+  />
+
+  <button type="primary" bindtap="manualAdd" disabled="{{!productId || !deviceName}}" style="margin-top:40rpx;">
+    手动添加
+  </button>
+</view>
+
+<!-- 加载/错误提示 -->
+<view wx:if="{{loading}}" class="loading">处理中...</view>
+<view wx:if="{{errorMsg}}" class="error">{{errorMsg}}</view>
+<view wx:if="{{successMsg}}" class="success">{{successMsg}}</view>
+
+</view>

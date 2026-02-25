@@ -1,0 +1,15 @@
+<view class="container">
+
+<view class="title">当前定时任务</view>
+
+<block wx:for="{{taskList}}" wx:key="index">
+  <view class="card">
+    {{item.desc}}
+  </view>
+</block>
+
+<button class="add-btn" bindtap="addTask">
+  新增定时任务
+</button>
+
+</view>

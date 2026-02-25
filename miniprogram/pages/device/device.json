@@ -1,0 +1,5 @@
+{
+  "usingComponents": {
+    "relay-panel": "/components/panels/relay-panel/relay-panel"
+  }
+}

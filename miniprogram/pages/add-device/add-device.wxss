@@ -1,0 +1,6 @@
+.container { padding: 40rpx; }
+.header { text-align:center; font-size:40rpx; margin:40rpx 0; font-weight:bold; }
+.tip { color:#666; font-size:28rpx; display:block; margin:40rpx 0 20rpx; }
+.loading, .error, .success { text-align:center; padding:40rpx; font-size:32rpx; }
+.error { color:#f44336; }
+.success { color:#4caf50; }

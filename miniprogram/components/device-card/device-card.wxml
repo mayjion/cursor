@@ -1,0 +1,49 @@
+<!-- components/device-card/device-card.wxml -->
+<view class="card" bindtap="onTap">
+
+<!-- 图片展示区 -->
+<view class="image-container">
+  <image 
+    class="cover"
+    src="{{imgSrc}}"
+    mode="aspectFit"
+    lazy-load
+    binderror="onImageError"
+  />
+</view>
+
+<!-- 信息区 -->
+<view class="info">
+
+  <!-- 标题 + 开关 -->
+  <view class="title-row">
+    <view class="title">{{displayName}}</view>
+
+    <view catchtap="toggleRelay">
+      <switch 
+        checked="{{device.state && device.state.relay1 || false}}"
+        color="#4caf50" 
+        bindchange="onSwitchChange" 
+        disabled="{{!device.online}}"
+      />
+    </view>
+  </view>
+
+  <!-- 状态行 -->
+  <view class="status-row">
+    <text class="status {{device.online ? 'online' : 'offline'}}">
+      {{device.online ? '在线' : '离线'}}
+    </text>
+    <text class="protocol">
+      {{device.connectType ? device.connectType.toUpperCase() : '未知'}}
+    </text>
+  </view>
+
+</view>
+
+<!-- 右下角更多按钮 -->
+<view class="more-btn" catchtap="showActionSheet">
+  <icon type="more" size="32" color="#999" />
+</view>
+
+</view>
