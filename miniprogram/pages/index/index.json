@@ -1,0 +1,5 @@
+{
+  "usingComponents": {
+    "device-card": "/components/device-card/device-card"
+  }
+}

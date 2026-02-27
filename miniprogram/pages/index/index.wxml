@@ -1,0 +1,39 @@
+<!-- pages/index/index.wxml -->
+<view class="page-container">
+
+<!-- 顶部添加按钮（保持原有） -->
+<button type="primary" bindtap="goAddDevice" style="margin:20rpx auto; width:60%;">+ 添加设备</button>
+
+<!-- 加载中 -->
+<view wx:if="{{loading}}" style="text-align:center; padding:200rpx 0;">
+  正在加载您的设备...
+</view>
+
+<!-- 错误提示 -->
+<view wx:elif="{{error}}" style="text-align:center; color:#f44336; padding:200rpx 0;">
+  {{error}}
+  <button type="primary" bindtap="refresh" style="margin-top:40rpx;">重试</button>
+</view>
+
+<!-- 设备列表区域 -->
+<view wx:else class="device-list-container">
+
+  <!-- 无设备提示 -->
+  <view wx:if="{{devices.length === 0}}" style="text-align:center; padding:200rpx 0; color:#666;">
+    您还没有绑定任何设备
+  </view>
+
+<!-- 设备列表区域 -->
+<view wx:else class="device-grid">
+  <device-card
+    wx:for="{{devices}}"
+    wx:key="deviceId"
+    device="{{item}}"
+    bind:tapdevice="goDetail"
+    bind:refresh="onDeviceRefresh"
+  />
+</view>
+
+</view>
+
+</view>

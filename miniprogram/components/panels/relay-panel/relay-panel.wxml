@@ -1,0 +1,43 @@
+<view class="relay-container">
+
+<!-- 开关控制 -->
+<block wx:for="{{switchCapabilities}}" wx:key="identifier">
+  <view class="card">
+    <view class="card-header">
+      <view class="title">{{item.name}}</view>
+      <switch
+        checked="{{device.state && device.state[item.identifier]}}"
+        data-identifier="{{item.identifier}}"
+        bindchange="toggle"
+        color="#16c06e"
+      />
+    </view>
+  </view>
+</block>
+
+<!-- 定时任务区域 -->
+<view wx:if="{{hasSchedule}}" 
+      class="card schedule-card"
+      bindtap="goSchedulePage">
+
+  <view class="card-title">定时任务</view>
+
+  <block wx:if="{{taskList.length === 0}}">
+    <view class="empty-text">
+      暂无定时任务
+    </view>
+  </block>
+
+  <block wx:for="{{taskList}}" wx:key="index">
+    <view class="task-item">
+      {{item.desc}}
+    </view>
+  </block>
+
+  <view class="enter-tip">
+    点击进入设置 →
+  </view>
+
+</view>
+
+</view>
