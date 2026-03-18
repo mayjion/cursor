@@ -623,8 +623,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
             children: [
               SegmentedButton<int>(
                 segments: const [
-                  ButtonSegment(value: 0, label: Text('BLE')),
-                  ButtonSegment(value: 1, label: Text('ESP-NOW')),
+                  ButtonSegment(value: 0, label: Text('蓝牙模式')),
+                  ButtonSegment(value: 1, label: Text('无线直连')),
                 ],
                 selected: {_workMode},
                 onSelectionChanged: (s) => setState(() => _workMode = s.first),
@@ -638,9 +638,9 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('切换至 ESP-NOW 模式'),
+                        title: const Text('切换至无线直连模式'),
                         content: const Text(
-                          '切换后 BLE 将无法搜索到该设备，需通过恢复出厂设置才能重新使用 BLE 模式。是否继续？',
+                          '切换后蓝牙将无法搜索到该设备，需通过恢复出厂设置才能重新使用蓝牙模式。是否继续？',
                         ),
                         actions: [
                           TextButton(
@@ -674,7 +674,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
             ],
           ),
           const SizedBox(height: 12),
-          const Text('Peer 管理（添加请使用对端 WiFi MAC）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          const Text('配对设备管理（添加请使用对端 WiFi MAC）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 8,
@@ -682,13 +682,13 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
             children: [
               FilledButton.tonal(
                 onPressed: _peerListLoading ? null : () => _showPeerAddDialog(context, device, manager),
-                child: const Text('添加 Peer'),
+                child: const Text('添加配对设备'),
               ),
               FilledButton.tonal(
                 onPressed: _peerListLoading ? null : () => _fetchPeerList(device, manager),
                 child: _peerListLoading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('刷新 Peer 列表'),
+                    : const Text('刷新配对列表'),
               ),
             ],
           ),
@@ -706,7 +706,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
           else if (_peerList.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text('暂无已添加 Peer，点击「刷新 Peer 列表」获取', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              child: Text('暂无配对设备，点击「刷新配对列表」获取', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             )
           else
             Container(
@@ -761,10 +761,10 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
         title: const Text('设备状态'),
         content: SingleChildScrollView(
           child: Text(
-            'BLE 已连接: ${bleConnected ? "是" : "否"}\n'
-            '有 Peer: ${hasPeer ? "是" : "否"}\n'
+            '蓝牙已连接: ${bleConnected ? "是" : "否"}\n'
+            '有配对设备: ${hasPeer ? "是" : "否"}\n'
             '本机 WiFi MAC: ${wifiMac.isEmpty ? "-" : wifiMac}\n'
-            '工作模式: ${workMode == 0 ? "BLE" : "ESP-NOW 仅"}',
+            '工作模式: ${workMode == 0 ? "蓝牙模式" : "无线直连"}',
           ),
         ),
         actions: [
@@ -802,7 +802,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           return AlertDialog(
-            title: const Text('添加 Peer'),
+            title: const Text('添加配对设备'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -835,7 +835,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                       controller: macController,
                       decoration: const InputDecoration(
                         labelText: 'WiFi MAC（如 AA:BB:CC:DD:EE:FF）',
-                        hintText: '对端设备的 WiFi MAC，非 BLE 地址',
+                        hintText: '对端设备的 WiFi MAC，非蓝牙地址',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -877,7 +877,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       return;
     }
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在添加 Peer…')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在添加配对设备…')));
     }
     final payload = Uint8List(7);
     payload.setRange(0, 6, macBytes);
@@ -891,7 +891,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     ));
     if (!context.mounted) return;
     final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Peer 已添加' : (ack == null ? '添加超时，请重试' : '添加失败'))));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? '配对设备已添加' : (ack == null ? '添加超时，请重试' : '添加失败'))));
     if (ok) _fetchPeerList(device, manager);
   }
 
@@ -916,7 +916,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
           _peerList = List.from(_peerList)..removeAt(index);
         }
       });
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Peer 已删除')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配对设备已删除')));
     } else {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('删除失败')));
     }
@@ -927,7 +927,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     final macStr = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除 Peer'),
+        title: const Text('删除配对设备'),
         content: TextField(
           controller: macController,
           decoration: const InputDecoration(
@@ -957,7 +957,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     ));
     if (!context.mounted) return;
     final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Peer 已删除' : '删除失败')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? '配对设备已删除' : '删除失败')));
   }
 
   Future<void> _clearAllPeers(BuildContext context, BaseDevice device, DeviceManagerNotifier manager) async {
@@ -970,7 +970,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     ));
     if (!context.mounted) return;
     final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? '已清空全部 Peer' : '清空失败')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? '已清空全部配对设备' : '清空失败')));
   }
 
   static bool _listEquals(Uint8List a, Uint8List b) {
