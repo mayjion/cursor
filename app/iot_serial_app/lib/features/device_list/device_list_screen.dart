@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/device/device_manager.dart';
 import '../../core/storage/device_entity.dart';
 import '../../core/storage/device_storage.dart';
+import '../../modules/ble/ble_device.dart';
 import 'device_card.dart';
 
 /// 设备列表数据；从详情返回时需 invalidate 以刷新列表。
@@ -12,12 +14,59 @@ final deviceListProvider = FutureProvider<List<DeviceEntity>>((ref) async {
   return DeviceStorage.list();
 });
 
-class DeviceListScreen extends ConsumerWidget {
+class DeviceListScreen extends ConsumerStatefulWidget {
   const DeviceListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DeviceListScreen> createState() => _DeviceListScreenState();
+}
+
+class _DeviceListScreenState extends ConsumerState<DeviceListScreen> {
+  /// 正在连接中的设备 id，用于在卡片上显示加载并防止重复点击
+  String? _connectingDeviceId;
+
+  Future<void> _connectToDevice(DeviceEntity entity) async {
+    final notifier = ref.read(deviceManagerProvider.notifier);
+    final currentDevice = ref.read(deviceManagerProvider).currentDevice;
+    if (currentDevice?.id == entity.id) return;
+    setState(() => _connectingDeviceId = entity.id);
+    try {
+      if (currentDevice != null) {
+        await notifier.disconnectCurrentDevice();
+        if (!mounted) return;
+      }
+      final device = BluetoothDevice.fromId(entity.id);
+      final bleDevice = BleDevice(bleDevice: device);
+      await bleDevice.connect();
+      if (!mounted) return;
+      notifier.setCurrentDevice(bleDevice);
+      if (!mounted) return;
+      context.go('/device/${entity.id}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('连接失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _connectingDeviceId = null);
+    }
+  }
+
+  Future<void> _disconnectCurrent() async {
+    await ref.read(deviceManagerProvider.notifier).disconnectCurrentDevice();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已断开蓝牙连接')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final asyncList = ref.watch(deviceListProvider);
+    final managerState = ref.watch(deviceManagerProvider);
+    final currentDevice = managerState.currentDevice;
 
     return Scaffold(
       appBar: AppBar(
@@ -53,7 +102,6 @@ class DeviceListScreen extends ConsumerWidget {
               ),
             );
           }
-          final managerState = ref.watch(deviceManagerProvider);
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(deviceListProvider);
@@ -64,9 +112,16 @@ class DeviceListScreen extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final entity = list[index];
                 final displayName = managerState.displayNames[entity.id] ?? entity.name;
+                final isBle = entity.type == 'ble';
+                final isConnected = currentDevice?.id == entity.id;
+                final isConnecting = _connectingDeviceId == entity.id;
                 return DeviceCard(
                   entity: entity,
                   displayName: displayName,
+                  isConnected: isConnected,
+                  isConnecting: isConnecting,
+                  onConnect: isBle ? () => _connectToDevice(entity) : null,
+                  onDisconnect: isBle ? _disconnectCurrent : null,
                   onDelete: () async {
                     await DeviceStorage.delete(entity.id);
                     final notifier = ref.read(deviceManagerProvider.notifier);

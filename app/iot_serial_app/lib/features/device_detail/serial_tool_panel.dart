@@ -30,6 +30,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   bool _txHexMode = false;
   bool _showTimestamp = false;
   bool _loopSend = false;
+  String? _currentDeviceId;
   BaseDevice? _subscribedDevice;
   StreamSubscription<Frame>? _rxSubscription;
   Timer? _loopTimer;
@@ -331,6 +332,20 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     final device = ref.watch(currentDeviceProvider);
     final manager = ref.read(deviceManagerProvider.notifier);
     _cachedManager = manager;
+
+    // 设备切换时重置与旧设备绑定的本地状态，避免沿用上一个设备的 workMode/Peer 列表等。
+    if (device?.id != _currentDeviceId) {
+      _currentDeviceId = device?.id;
+      _rxPackets.clear();
+      _txByteCount = 0;
+      _workMode = 0;
+      _hasFetchedBaud = false;
+      _fetchScheduled = false;
+      _peerList = [];
+      _peerListError = null;
+      _peerListLoading = false;
+    }
+
     _ensureSubscribed(device);
 
     if (device == null) {
@@ -861,6 +876,9 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入有效的 6 字节 WiFi MAC')));
       return;
     }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在添加 Peer…')));
+    }
     final payload = Uint8List(7);
     payload.setRange(0, 6, macBytes);
     payload[6] = chan;
@@ -873,7 +891,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     ));
     if (!context.mounted) return;
     final ok = ack != null && ack.payload.isNotEmpty && ack.payload[0] == AckStatus.ok;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Peer 已添加' : '添加失败')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Peer 已添加' : (ack == null ? '添加超时，请重试' : '添加失败'))));
     if (ok) _fetchPeerList(device, manager);
   }
 

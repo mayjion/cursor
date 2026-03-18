@@ -13,12 +13,15 @@ class DeviceManagerState {
   final BaseDevice? currentDevice;
   final Map<String, String> displayNames;
 
+  /// [currentDevice] 传 null 表示清空当前设备；不传参表示保留原值。
+  /// 因 Dart 无法区分「未传参」与「传 null」，用 [clearCurrentDevice] 表示显式清空。
   DeviceManagerState copyWith({
     BaseDevice? currentDevice,
+    bool clearCurrentDevice = false,
     Map<String, String>? displayNames,
   }) {
     return DeviceManagerState(
-      currentDevice: currentDevice ?? this.currentDevice,
+      currentDevice: clearCurrentDevice ? null : (currentDevice ?? this.currentDevice),
       displayNames: displayNames ?? this.displayNames,
     );
   }
@@ -32,7 +35,7 @@ class DeviceManagerNotifier extends StateNotifier<DeviceManagerState> {
 
   void setCurrentDevice(BaseDevice? device) async {
     if (device == null) {
-      state = state.copyWith(currentDevice: null);
+      state = state.copyWith(clearCurrentDevice: true);
       return;
     }
     final entity = await DeviceStorage.get(device.id);
@@ -41,6 +44,15 @@ class DeviceManagerNotifier extends StateNotifier<DeviceManagerState> {
       displayNames[device.id] = entity.name;
     }
     state = state.copyWith(currentDevice: device, displayNames: displayNames);
+  }
+
+  /// 断开当前已连接设备并清空 currentDevice。同一时刻 APP 只能连接一个蓝牙设备，连接新设备前需先断开当前设备。
+  Future<void> disconnectCurrentDevice() async {
+    final device = state.currentDevice;
+    if (device != null) {
+      await device.disconnect();
+    }
+    state = state.copyWith(clearCurrentDevice: true);
   }
 
   Future<void> send(Frame frame) async {
