@@ -47,11 +47,19 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   Future<void> _tryBleConnect() async {
     try {
+      final manager = ref.read(deviceManagerProvider.notifier);
+      final oldDevice = ref.read(deviceManagerProvider).currentDevice;
+      if (oldDevice != null && oldDevice.id != widget.deviceId) {
+        // Don't await — old device may have stopped BLE (e.g. switched to ESP-NOW),
+        // causing disconnect to block until OS-level timeout. Fire-and-forget with a safety timeout.
+        manager.disconnectCurrentDevice().timeout(const Duration(seconds: 2)).catchError((_) {});
+      }
+
       final device = BluetoothDevice.fromId(widget.deviceId);
       final bleDevice = BleDevice(bleDevice: device);
       await bleDevice.connect();
       if (!mounted) return;
-      ref.read(deviceManagerProvider.notifier).setCurrentDevice(bleDevice);
+      manager.setCurrentDevice(bleDevice);
       if (!mounted) return;
       setState(() {
         _connectState = _BleConnectState.success;
@@ -206,6 +214,10 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () {
+                // Fire-and-forget: don't block navigation waiting for BLE disconnect
+                // (device may have switched to ESP-NOW and BLE is already off).
+                ref.read(deviceManagerProvider.notifier).disconnectCurrentDevice()
+                    .timeout(const Duration(seconds: 2)).catchError((_) {});
                 ref.invalidate(deviceListProvider);
                 context.go('/');
               },
