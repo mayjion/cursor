@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/device/base_device.dart';
 import '../../core/device/device_manager.dart';
 import '../../core/protocol/frame.dart';
+import '../../core/settings/app_settings.dart';
 import '../../core/storage/device_entity.dart';
 import '../../core/storage/device_storage.dart';
 
@@ -23,6 +24,14 @@ class SerialToolPanel extends ConsumerStatefulWidget {
 class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   /// Received packets: (timestamp, payload) for timestamp display and save.
   final List<(DateTime, Uint8List)> _rxPackets = [];
+  /// Incremental RX byte count (avoids O(n) fold on every build).
+  int _rxTotalBytes = 0;
+  /// Batched UI updates: high-rate BLE notifications would otherwise rebuild a megabyte [SelectableText] every packet.
+  final List<(DateTime, Uint8List)> _rxPending = [];
+  Timer? _rxUiCoalesceTimer;
+  static const Duration _rxUiCoalesceInterval = Duration(milliseconds: 48);
+  /// True after we dropped oldest packets due to buffer cap (see [AppSettingsState.serialRxBufferBytes]).
+  bool _rxDroppedOldData = false;
   final ScrollController _rxScrollController = ScrollController();
   final TextEditingController _sendController = TextEditingController();
   final TextEditingController _loopIntervalController = TextEditingController(text: '1000');
@@ -52,8 +61,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   List<({String mac, int channel})> _peerList = [];
   bool _peerListLoading = false;
   String? _peerListError;
-
-  int get _rxByteCount => _rxPackets.fold<int>(0, (s, p) => s + p.$2.length);
+  /// FUN-UART 面板内底部三 Tab：串口工具 / 串口配置 / 工作模式
+  int _deviceNavTab = 0;
 
   /// Parse UART baud (4 bytes LE) from status query ACK.
   /// ACK layout: [0]=status, [1]=ble, [2]=has_peer, [3..8]=mac, [9]=work_mode, [10]=device_type_len, [11..]=device_type, then 4 bytes baud, then 3 bytes data_bits, stop_bits, parity.
@@ -160,6 +169,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
 
   @override
   void dispose() {
+    _rxUiCoalesceTimer?.cancel();
     _loopTimer?.cancel();
     _rxSubscription?.cancel();
     _rxScrollController.dispose();
@@ -184,16 +194,42 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
           DateTime.now().difference(_lastSentAt!).inMilliseconds < 500) {
         return;
       }
-      if (mounted) {
-        setState(() {
-          _rxPackets.add((DateTime.now(), Uint8List.fromList(frame.payload)));
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || !_rxScrollController.hasClients) return;
-          final pos = _rxScrollController.position;
-          _rxScrollController.jumpTo(pos.maxScrollExtent);
-        });
-      }
+      if (!mounted) return;
+      _rxPending.add((DateTime.now(), Uint8List.fromList(frame.payload)));
+      _rxUiCoalesceTimer?.cancel();
+      _rxUiCoalesceTimer = Timer(_rxUiCoalesceInterval, _flushRxPendingToUi);
+    });
+  }
+
+  void _trimRxToMaxBytes() {
+    final maxBytes = ref.read(appSettingsProvider).serialRxBufferBytes;
+    while (_rxTotalBytes > maxBytes && _rxPackets.isNotEmpty) {
+      _rxDroppedOldData = true;
+      final (_, bytes) = _rxPackets.removeAt(0);
+      _rxTotalBytes -= bytes.length;
+    }
+  }
+
+  void _mergePendingIntoPackets() {
+    if (_rxPending.isEmpty) return;
+    final batch = List<(DateTime, Uint8List)>.from(_rxPending);
+    _rxPending.clear();
+    for (final e in batch) {
+      _rxPackets.add(e);
+      _rxTotalBytes += e.$2.length;
+    }
+    _trimRxToMaxBytes();
+  }
+
+  void _flushRxPendingToUi() {
+    _rxUiCoalesceTimer?.cancel();
+    _rxUiCoalesceTimer = null;
+    if (!mounted || _rxPending.isEmpty) return;
+    setState(_mergePendingIntoPackets);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_rxScrollController.hasClients) return;
+      final pos = _rxScrollController.position;
+      _rxScrollController.jumpTo(pos.maxScrollExtent);
     });
   }
 
@@ -204,7 +240,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       if (_showTimestamp) {
         sb.write('[${_formatTime(dt)}] ');
       }
-      sb.write(_bytesToDisplay(bytes.toList(), hex));
+      sb.write(_bytesToDisplay(bytes, hex));
       if (_showTimestamp) sb.writeln();
     }
     return sb.toString().trim();
@@ -214,16 +250,17 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
   }
 
-  static String _bytesToDisplay(List<int> bytes, bool hex) {
+  static String _bytesToDisplay(Uint8List bytes, bool hex) {
     if (bytes.isEmpty) return '';
     if (hex) {
-      return bytes.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
+      final sb = StringBuffer(bytes.length * 3);
+      for (var i = 0; i < bytes.length; i++) {
+        if (i > 0) sb.write(' ');
+        sb.write(bytes[i].toRadixString(16).padLeft(2, '0').toUpperCase());
+      }
+      return sb.toString();
     }
     return utf8.decode(bytes, allowMalformed: true);
-  }
-
-  static String _bytesToDisplayFromUint8(Uint8List bytes, bool hex) {
-    return _bytesToDisplay(bytes.toList(), hex);
   }
 
   static Uint8List _parseSendContent(String text, bool hexMode) {
@@ -330,13 +367,38 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   @override
   Widget build(BuildContext context) {
     final device = ref.watch(currentDeviceProvider);
+    final appSettings = ref.watch(appSettingsProvider);
     final manager = ref.read(deviceManagerProvider.notifier);
     _cachedManager = manager;
+
+    ref.listen<AppSettingsState>(appSettingsProvider, (previous, next) {
+      if (previous?.serialRxBufferMegabytes != next.serialRxBufferMegabytes && mounted) {
+        setState(_trimRxToMaxBytes);
+      }
+    });
+
+    ref.listen<int>(serialRxLogClearTickProvider, (previous, next) {
+      if (previous == null || previous == next || !mounted) return;
+      _rxUiCoalesceTimer?.cancel();
+      _rxUiCoalesceTimer = null;
+      _rxPending.clear();
+      setState(() {
+        _rxPackets.clear();
+        _rxTotalBytes = 0;
+        _rxDroppedOldData = false;
+        _txByteCount = 0;
+      });
+    });
 
     // 设备切换时重置与旧设备绑定的本地状态，避免沿用上一个设备的 workMode/Peer 列表等。
     if (device?.id != _currentDeviceId) {
       _currentDeviceId = device?.id;
+      _rxUiCoalesceTimer?.cancel();
+      _rxUiCoalesceTimer = null;
+      _rxPending.clear();
       _rxPackets.clear();
+      _rxTotalBytes = 0;
+      _rxDroppedOldData = false;
       _txByteCount = 0;
       _workMode = 0;
       _hasFetchedBaud = false;
@@ -344,6 +406,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       _peerList = [];
       _peerListError = null;
       _peerListLoading = false;
+      _deviceNavTab = 0;
     }
 
     _ensureSubscribed(device);
@@ -360,32 +423,71 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAndSetDeviceState(device, manager));
     }
 
-    return Padding(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: IndexedStack(
+            index: _deviceNavTab.clamp(0, 2),
+            sizing: StackFit.expand,
+            children: [
+              _buildToolTab(context, device, manager, appSettings),
+              _buildUartConfigTab(context, device, manager),
+              _buildWorkModeTab(context, device, manager),
+            ],
+          ),
+        ),
+        NavigationBar(
+          selectedIndex: _deviceNavTab,
+          onDestinationSelected: (i) => setState(() => _deviceNavTab = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.terminal),
+              label: '串口工具',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.tune),
+              label: '串口配置',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.device_hub_outlined),
+              label: '工作模式',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolTab(
+    BuildContext context,
+    BaseDevice device,
+    DeviceManagerNotifier manager,
+    AppSettingsState appSettings,
+  ) {
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('串口工具', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          // Receive area: byte count + 清空/保存 on first row; 字符串/HEX/时间戳 on second row
           Row(
             children: [
-              Text(
-                '接收 ($_rxByteCount 字节)',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              Expanded(
+                child: Text(
+                  '接收 ($_rxTotalBytes 字节 · 最多 ${appSettings.serialRxBufferMegabytes} MB${_rxDroppedOldData ? '，较早数据已丢弃' : ''})',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
               ),
-              const Spacer(),
               FilledButton.tonal(
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                onPressed: _rxPackets.isEmpty && _txByteCount == 0
+                onPressed: _rxPackets.isEmpty && _rxPending.isEmpty && _txByteCount == 0
                     ? null
-                    : () => setState(() {
-                          _rxPackets.clear();
-                          _txByteCount = 0;
-                        }),
+                    : () => ref.read(serialRxLogClearTickProvider.notifier).update((n) => n + 1),
                 child: const Text('清空'),
               ),
               const SizedBox(width: 8),
@@ -394,7 +496,14 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                onPressed: _rxPackets.isEmpty ? null : () => Share.share(_rxContentToSave(_rxHexMode), subject: '串口接收数据'),
+                onPressed: _rxPackets.isEmpty && _rxPending.isEmpty
+                    ? null
+                    : () {
+                        _rxUiCoalesceTimer?.cancel();
+                        _rxUiCoalesceTimer = null;
+                        setState(_mergePendingIntoPackets);
+                        Share.share(_rxContentToSave(_rxHexMode), subject: '串口接收数据');
+                      },
                 child: const Text('保存'),
               ),
             ],
@@ -432,23 +541,29 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               border: Border.all(color: Theme.of(context).dividerColor),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: SingleChildScrollView(
-              controller: _rxScrollController,
-              padding: const EdgeInsets.all(8),
-              child: SelectableText(
-                _rxPackets.isEmpty
-                    ? ''
-                    : _rxPackets
-                        .map((p) => _showTimestamp
-                            ? '[${_formatTime(p.$1)}] ${_bytesToDisplayFromUint8(p.$2, _rxHexMode)}'
-                            : _bytesToDisplayFromUint8(p.$2, _rxHexMode))
-                        .join(_showTimestamp ? '\n' : ''),
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            child: SelectionArea(
+              child: ListView.builder(
+                controller: _rxScrollController,
+                padding: const EdgeInsets.all(8),
+                itemCount: _rxPackets.length,
+                addAutomaticKeepAlives: false,
+                itemBuilder: (context, index) {
+                  final p = _rxPackets[index];
+                  final line = _showTimestamp
+                      ? '[${_formatTime(p.$1)}] ${_bytesToDisplay(p.$2, _rxHexMode)}'
+                      : _bytesToDisplay(p.$2, _rxHexMode);
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: _showTimestamp ? 4 : 0),
+                    child: Text(
+                      line,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                    ),
+                  );
+                },
               ),
             ),
           ),
           const SizedBox(height: 16),
-          // Send area: byte count on first row, then mode toggle
           Row(
             children: [
               Text(
@@ -521,11 +636,19 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 8),
-          const Text('串口配置', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUartConfigTab(BuildContext context, BaseDevice device, DeviceManagerNotifier manager) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('串口配置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -578,15 +701,15 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
               FilledButton.tonal(
                 onPressed: () async {
-                  final device = ref.read(currentDeviceProvider);
-                  final manager = ref.read(deviceManagerProvider.notifier);
-                  if (device == null) return;
+                  final d = ref.read(currentDeviceProvider);
+                  final m = ref.read(deviceManagerProvider.notifier);
+                  if (d == null) return;
                   final baud = _useCustomBaud ? _customBaudRate : _baudRates[_selectedBaudIndex.clamp(0, _baudRates.length - 1)];
                   final dataBits = _dataBitsOptions[_selectedDataBitsIndex.clamp(0, _dataBitsOptions.length - 1)];
                   final stopBits = _stopBitsOptions[_selectedStopBitsIndex.clamp(0, _stopBitsOptions.length - 1)];
                   final parity = _parityOptions[_selectedParityIndex.clamp(0, _parityOptions.length - 1)].$1;
-                  final seq = manager.nextSeq();
-                  final ack = await _sendControlAndWaitAck(device, manager, Frame(
+                  final seq = m.nextSeq();
+                  final ack = await _sendControlAndWaitAck(d, m, Frame(
                     type: FrameType.control,
                     cmd: FrameCmd.uartConfig,
                     seq: seq,
@@ -613,9 +736,19 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkModeTab(BuildContext context, BaseDevice device, DeviceManagerNotifier manager) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('工作模式', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          const Text('工作模式', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -631,9 +764,9 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
               FilledButton.tonal(
                 onPressed: () async {
-                  final device = ref.read(currentDeviceProvider);
-                  final manager = ref.read(deviceManagerProvider.notifier);
-                  if (device == null) return;
+                  final d = ref.read(currentDeviceProvider);
+                  final m = ref.read(deviceManagerProvider.notifier);
+                  if (d == null) return;
                   if (_workMode == 1) {
                     final confirmed = await showDialog<bool>(
                       context: context,
@@ -656,8 +789,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
                     );
                     if (!mounted || confirmed != true) return;
                   }
-                  final seq = manager.nextSeq();
-                  final ack = await _sendControlAndWaitAck(device, manager, Frame(
+                  final seq = m.nextSeq();
+                  final ack = await _sendControlAndWaitAck(d, m, Frame(
                     type: FrameType.control,
                     cmd: FrameCmd.setWorkMode,
                     seq: seq,
@@ -673,9 +806,9 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           const Text('配对设备管理（添加请使用对端 WiFi MAC）', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -717,6 +850,7 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
               ),
               child: ListView.builder(
                 shrinkWrap: true,
+                physics: const ClampingScrollPhysics(),
                 itemCount: _peerList.length,
                 itemBuilder: (context, index) {
                   final entry = _peerList[index];

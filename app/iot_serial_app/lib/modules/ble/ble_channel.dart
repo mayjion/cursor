@@ -27,13 +27,19 @@ class BleChannel implements DeviceChannel {
       await device.connect(timeout: const Duration(seconds: 35), mtu: 512);
     }
     await _ensureCharacteristic();
+
+    // 必须每次连接都挂上新的 notify 监听。仅当 !isNotifying 才 subscribe 时，
+    // 重连后部分机型/OS 上 isNotifying 仍为 true，但旧订阅已随 disconnect 取消，
+    // 会导致 RX 数据不进 _dataController，面板无显示而底层仍能收到通知。
+    await _notifySubscription?.cancel();
+    _notifySubscription = null;
     if (!_characteristic!.isNotifying) {
       await _characteristic!.setNotifyValue(true);
-      _notifySubscription = _characteristic!.onValueReceived.listen((value) {
-        _dataController.add(Uint8List.fromList(value));
-      });
-      device.cancelWhenDisconnected(_notifySubscription!);
     }
+    _notifySubscription = _characteristic!.onValueReceived.listen((value) {
+      _dataController.add(Uint8List.fromList(value));
+    });
+    device.cancelWhenDisconnected(_notifySubscription!);
   }
 
   static bool _uuidEquals(Guid a, Guid b) {

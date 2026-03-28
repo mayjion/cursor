@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/device/device_manager.dart';
 import '../../core/protocol/frame.dart';
+import '../../core/settings/app_settings.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
   const TerminalScreen({super.key});
@@ -56,7 +57,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   }
 
   void _clear() {
+    ref.read(serialRxLogClearTickProvider.notifier).update((n) => n + 1);
     setState(() => _log.clear());
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
   }
 
   Future<void> _send() async {
@@ -77,6 +82,17 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   @override
   Widget build(BuildContext context) {
     final device = ref.watch(currentDeviceProvider);
+
+    ref.listen<int>(serialRxLogClearTickProvider, (previous, next) {
+      if (previous == null || previous == next || !mounted) return;
+      setState(() => _log.clear());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      });
+    });
+
     if (device == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('串口终端')),

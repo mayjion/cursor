@@ -30,6 +30,13 @@ class AppStrings {
   String get bluetoothPermission => isZh ? '蓝牙权限说明' : 'Bluetooth permission';
   String get bluetoothPermissionSubtitle =>
       isZh ? '扫描与连接设备需要蓝牙权限' : 'Bluetooth permission is required for scan and connect';
+
+  String get serialRxBufferSection => isZh ? '串口接收缓冲区' : 'Serial receive buffer';
+  String get serialRxBufferSubtitle => isZh
+      ? '超出上限时丢弃最旧数据（1–10 MB）'
+      : 'Oldest data is dropped when over limit (1–10 MB)';
+  String serialRxBufferValueLabel(int mb) =>
+      isZh ? '上限 $mb MB' : 'Limit $mb MB';
 }
 
 final appStringsProvider = Provider<AppStrings>((ref) {

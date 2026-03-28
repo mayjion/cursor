@@ -49,6 +49,38 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ),
+          const SizedBox(height: 16),
+          ListTile(
+            title: Text(strings.serialRxBufferSection),
+            subtitle: Text(strings.serialRxBufferSubtitle),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: settings.serialRxBufferMegabytes.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
+                    onChanged: (v) {
+                      ref.read(appSettingsProvider.notifier).setSerialRxBufferMegabytes(v.round());
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 72,
+                  child: Text(
+                    strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const Divider(height: 32),
           ListTile(
             leading: const Icon(Icons.info_outline),
