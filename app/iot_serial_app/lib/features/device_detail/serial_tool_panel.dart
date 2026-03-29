@@ -10,6 +10,7 @@ import '../../core/device/base_device.dart';
 import '../../core/device/device_manager.dart';
 import '../../core/protocol/frame.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/settings/app_strings.dart';
 import '../../core/storage/device_entity.dart';
 import '../../core/storage/device_storage.dart';
 
@@ -642,6 +643,8 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
   }
 
   Widget _buildUartConfigTab(BuildContext context, BaseDevice device, DeviceManagerNotifier manager) {
+    final strings = ref.watch(appStringsProvider);
+    final settings = ref.watch(appSettingsProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -649,6 +652,37 @@ class _SerialToolPanelState extends ConsumerState<SerialToolPanel> {
         children: [
           const Text('串口配置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
+          Text(strings.serialRxBufferSection, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(strings.serialRxBufferSubtitle, style: Theme.of(context).textTheme.bodySmall),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: settings.serialRxBufferMegabytes.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
+                    onChanged: (v) {
+                      ref.read(appSettingsProvider.notifier).setSerialRxBufferMegabytes(v.round());
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 72,
+                  child: Text(
+                    strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 24),
           Wrap(
             spacing: 12,
             runSpacing: 8,

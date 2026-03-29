@@ -350,7 +350,8 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   Widget _buildPanelByDeviceType(BuildContext context, WidgetRef ref, String deviceType) {
     switch (deviceType) {
-      case 'FUN-UART':
+      case 'FUN-UART-C3':
+      case 'FUN-UART': // 旧固件存盘兼容
         return const SerialToolPanel();
       default:
         return const Center(child: Text('该设备类型面板即将支持'));

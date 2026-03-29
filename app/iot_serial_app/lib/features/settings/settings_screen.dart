@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/settings/app_settings.dart';
 import '../../core/settings/app_strings.dart';
@@ -49,37 +50,13 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ),
-          const SizedBox(height: 16),
+          const Divider(height: 32),
           ListTile(
-            title: Text(strings.serialRxBufferSection),
-            subtitle: Text(strings.serialRxBufferSubtitle),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Slider(
-                    value: settings.serialRxBufferMegabytes.toDouble(),
-                    min: 1,
-                    max: 10,
-                    divisions: 9,
-                    label: strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
-                    onChanged: (v) {
-                      ref.read(appSettingsProvider.notifier).setSerialRxBufferMegabytes(v.round());
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 72,
-                  child: Text(
-                    strings.serialRxBufferValueLabel(settings.serialRxBufferMegabytes),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-              ],
-            ),
+            leading: const Icon(Icons.system_update_alt),
+            title: Text(strings.settingsFirmwareUpgrade),
+            subtitle: Text(strings.settingsFirmwareUpgradeSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/firmware'),
           ),
           const Divider(height: 32),
           ListTile(

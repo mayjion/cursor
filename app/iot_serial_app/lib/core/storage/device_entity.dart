@@ -1,7 +1,7 @@
 /// Stored device entity: id, type (connection), deviceType (product), name, lastConnected, config.
-/// type = connection type (ble/wifi/gateway); deviceType = product type (e.g. FUN-UART) for panel selection.
+/// type = connection type (ble/wifi/gateway); deviceType = product type (e.g. FUN-UART-C3) for panel selection.
 class DeviceEntity {
-  static const String defaultDeviceType = 'FUN-UART';
+  static const String defaultDeviceType = 'FUN-UART-C3';
 
   const DeviceEntity({
     required this.id,
@@ -16,7 +16,7 @@ class DeviceEntity {
   final String id;
   final String type; // 'ble', 'wifi', 'gateway' (connection type)
   final String name;
-  final String deviceType; // e.g. 'FUN-UART' (product type for panel)
+  final String deviceType; // e.g. 'FUN-UART-C3' (product type for panel)
   final int? lastConnected; // timestamp
   final Map<String, dynamic> config;
   /// WiFi MAC from status query ACK [2..7], e.g. "AA:BB:CC:DD:EE:FF". Used when adding peer from saved device.

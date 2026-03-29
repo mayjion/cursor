@@ -8,6 +8,23 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>本应用需要蓝牙以扫描和连接 BLE 设备（Service 0xFE01）。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于在局域网内访问设备热点（192.168.4.1）进行固件升级。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>192.168.4.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 	<key>CFBundleDisplayName</key>
 	<string>FUN智能</string>
 	<key>CFBundleExecutable</key>

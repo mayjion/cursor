@@ -8,7 +8,7 @@ const String _keySerialRxBufferMb = 'serial_rx_buffer_mb';
 
 /// Theme index: 0 = blue, 1 = green, 2 = purple.
 /// Language: 'zh' = 中文, 'en' = English.
-/// [serialRxBufferMegabytes]: in-app RX log cap for serial tool / related UIs (1–10 MB).
+/// [serialRxBufferMegabytes]: in-app RX log cap for serial tool / terminal (1–10 MB); UI 在设备面板「串口配置」。
 class AppSettingsState {
   const AppSettingsState({
     this.themeIndex = 0,
