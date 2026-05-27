@@ -41,21 +41,24 @@ class AppStrings {
   // Firmware OTA (FUN AP @ 192.168.4.1)
   String get settingsFirmwareUpgrade => isZh ? '固件升级' : 'Firmware upgrade';
   String get settingsFirmwareUpgradeSubtitle => isZh
-      ? '连接 FUN* 热点后对设备 OTA'
-      : 'OTA when connected to FUN* AP';
+      ? '连接 FUN* / FUNLIGHT 热点后对设备 OTA'
+      : 'OTA when connected to FUN* / FUNLIGHT AP';
 
   String get firmwareTitle => isZh ? '固件升级' : 'Firmware upgrade';
   String get firmwareIntro => isZh
-      ? '请先连接设备热点（SSID 以 FUN 开头，网关多为 192.168.4.1），再拉取设备信息并选择内置固件上传。'
-      : 'Connect to the device AP (SSID starts with FUN, gateway usually 192.168.4.1), fetch info, then pick a bundled firmware.';
+      ? '请先连接设备热点（FUN 系列或烧录器 FUNLIGHT，网关多为 192.168.4.1），再读取设备信息并选择内置固件上传。'
+      : 'Connect to the device AP (FUN series or flasher FUNLIGHT, gateway usually 192.168.4.1), fetch info, then upload.';
+  String get firmwareEspFlasherHint => isZh
+      ? '烧录器：上电 10 秒内双击按键进入升级模式（全部 LED 亮），WiFi FUNLIGHT / funlight。硬件型号 ESPFLASHER_V4（4MB）或 ESPFLASHER_V16（16MB），软件版本如 V1.0。'
+      : 'Flasher: double-click within 10s after boot (all LEDs on). WiFi FUNLIGHT / funlight. Models ESPFLASHER_V4 (4MB) or ESPFLASHER_V16 (16MB), SW e.g. V1.0.';
 
   String get firmwareNetworkSection => isZh ? '当前网络' : 'Network';
   String get firmwareSsidLabel => isZh ? 'WiFi：' : 'WiFi: ';
   String get firmwareGatewayLabel => isZh ? '网关：' : 'Gateway: ';
   String get firmwareUnknown => isZh ? '未知' : 'Unknown';
   String get firmwareEnvWarning => isZh
-      ? '未满足条件：请连接设备 FUN* 热点，并确认网关为 192.168.4.1（若无法读取网关，仍可尝试「读取设备信息」）。'
-      : 'Expected FUN* SSID and gateway 192.168.4.1 (if gateway is unknown, you may still try Probe).';
+      ? '未满足条件：请连接设备 FUN* / FUNLIGHT 热点，并确认网关为 192.168.4.1（若无法读取网关，仍可尝试「读取设备信息」）。'
+      : 'Expected FUN* / FUNLIGHT SSID and gateway 192.168.4.1 (if gateway is unknown, you may still try Probe).';
   String get firmwareEnvOk =>
       isZh ? '网络条件符合，可读取设备信息。' : 'Network looks good; you can probe the device.';
 
@@ -69,6 +72,13 @@ class AppStrings {
   String get firmwareChipC3 => 'ESP32-C3';
   String get firmwareChipS2 => 'ESP32-S2';
   String get firmwareChipS3 => 'ESP32-S3';
+
+  String get firmwareVariantLabel => isZh ? '变体：' : 'Variant: ';
+  String get firmwarePickFirmwareEspFlasher =>
+      isZh ? '可选固件（须与硬件型号一致）' : 'Firmware (must match hardware model)';
+  String get firmwareEspFlasherMismatch => isZh
+      ? '所选固件与设备硬件型号不匹配（V4/V16 不可互刷）'
+      : 'Selected firmware does not match device model (V4/V16 not interchangeable)';
 
   String get firmwarePickFirmware => isZh ? '可选固件（同芯片）' : 'Compatible firmware';
   String get firmwareStartUpload => isZh ? '上传到设备' : 'Upload to device';

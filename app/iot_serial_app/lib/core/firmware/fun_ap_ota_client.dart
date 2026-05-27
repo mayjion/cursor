@@ -8,6 +8,17 @@ class FunApOtaClient {
 
   final http.Client _client;
 
+  /// GET /info（烧录器 JSON；失败时由调用方回退 HTML）。
+  Future<String> fetchInfoJson() async {
+    final r = await _client
+        .get(Uri.parse('$kFunApBaseUrl/info'))
+        .timeout(const Duration(seconds: 8));
+    if (r.statusCode != 200 || r.body.isEmpty) {
+      throw StateError('HTTP ${r.statusCode}');
+    }
+    return r.body;
+  }
+
   /// GET /system，失败时可再试 /status（部分页面较简）。
   Future<String> fetchSystemHtml() async {
     try {

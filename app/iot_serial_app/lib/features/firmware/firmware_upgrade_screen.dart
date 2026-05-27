@@ -7,7 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/firmware/ap_device_family.dart';
 import '../../core/firmware/ap_device_info.dart';
+import '../../core/firmware/espflasher_catalog.dart';
 import '../../core/firmware/firmware_catalog.dart';
 import '../../core/firmware/firmware_target_chip.dart';
 import '../../core/firmware/fun_ap_ota_client.dart';
@@ -73,10 +75,7 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
     return t;
   }
 
-  bool get _ssidLooksLikeFunAp {
-    final s = _wifiSsid ?? '';
-    return s.toUpperCase().startsWith('FUN');
-  }
+  bool get _ssidLooksLikeFunAp => ssidLooksLikeOtaAp(_wifiSsid);
 
   bool get _gatewayLooksLikeSoftAp {
     final g = _wifiGateway;
@@ -94,8 +93,18 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
     });
     try {
       final client = FunApOtaClient();
-      final html = await client.fetchSystemHtml();
-      final parsed = parseApDeviceInfo(html);
+      ApDeviceInfo? parsed;
+
+      try {
+        final jsonText = await client.fetchInfoJson();
+        parsed = parseApDeviceInfoFromJson(jsonText);
+      } catch (_) {}
+
+      if (parsed == null) {
+        final html = await client.fetchSystemHtml();
+        parsed = parseApDeviceInfo(html);
+      }
+
       if (!mounted) return;
       if (parsed == null) {
         setState(() {
@@ -104,9 +113,10 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         });
         return;
       }
+      final info = parsed;
       setState(() {
-        _deviceInfo = parsed;
-        _selected = null;
+        _deviceInfo = info;
+        _selected = info.isEspFlasher ? espFlasherCatalogForProduct(info.product) : null;
         _probeBusy = false;
       });
     } catch (e) {
@@ -132,6 +142,16 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       ),
     );
     if (ok != true || !mounted) return;
+
+    final device = _deviceInfo;
+    if (device != null &&
+        device.isEspFlasher &&
+        !catalogEntryMatchesDeviceProduct(entry, device.product)) {
+      setState(() {
+        _uploadStatus = strings.firmwareEspFlasherMismatch;
+      });
+      return;
+    }
 
     setState(() {
       _uploadBusy = true;
@@ -182,7 +202,11 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final chip = _deviceInfo?.inferredChip;
-    final entries = chip == null ? <FirmwareCatalogEntry>[] : catalogForChip(chip);
+    final entries = _deviceInfo == null
+        ? <FirmwareCatalogEntry>[]
+        : (_deviceInfo!.isEspFlasher
+            ? espFlasherCatalogEntriesForDevice(_deviceInfo!.product)
+            : (chip == null ? <FirmwareCatalogEntry>[] : catalogForChip(chip)));
 
     return Scaffold(
       appBar: AppBar(
@@ -196,6 +220,13 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(strings.firmwareIntro, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Text(
+            strings.firmwareEspFlasherHint,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+          ),
           const SizedBox(height: 16),
           Card(
             child: Padding(
@@ -263,12 +294,19 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
                     Text(
                       '${strings.firmwareChipLabel} ${_chipLabel(_deviceInfo!.inferredChip, strings)}',
                     ),
+                    if (_deviceInfo!.variant != null)
+                      Text('${strings.firmwareVariantLabel} ${_deviceInfo!.variant}'),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            Text(strings.firmwarePickFirmware, style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              _deviceInfo!.isEspFlasher
+                  ? strings.firmwarePickFirmwareEspFlasher
+                  : strings.firmwarePickFirmware,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 8),
             ...entries.map((e) {
               final isCurrentDevice =

@@ -1,18 +1,47 @@
+import 'dart:convert';
+
 import 'firmware_target_chip.dart';
 
-/// 从设备 AP 网页解析的信息。
+/// 从设备 AP 网页或 /info JSON 解析的信息。
 class ApDeviceInfo {
   ApDeviceInfo({
     required this.rawHtml,
     this.version,
     required this.product,
     required this.inferredChip,
+    this.variant,
   });
 
   final String rawHtml;
   final String? version;
   final String product;
   final FirmwareTargetChip inferredChip;
+  final String? variant;
+
+  bool get isEspFlasher {
+    final p = product.trim().toUpperCase();
+    return p == 'ESPFLASHER_V4' || p == 'ESPFLASHER_V16';
+  }
+}
+
+/// GET /info JSON（烧录器与部分 FUN 设备）。
+ApDeviceInfo? parseApDeviceInfoFromJson(String jsonText) {
+  try {
+    final m = jsonDecode(jsonText);
+    if (m is! Map<String, dynamic>) return null;
+    final prod = m['product']?.toString().trim();
+    if (prod == null || prod.isEmpty) return null;
+    final ver = m['version']?.toString().trim();
+    return ApDeviceInfo(
+      rawHtml: jsonText,
+      version: ver == null || ver.isEmpty ? null : ver,
+      product: prod,
+      inferredChip: inferChipFromProduct(prod),
+      variant: m['variant']?.toString().trim(),
+    );
+  } catch (_) {
+    return null;
+  }
 }
 
 final _reDtuLine = RegExp(
