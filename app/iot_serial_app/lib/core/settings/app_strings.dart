@@ -96,6 +96,9 @@ class AppStrings {
           : 'Bundled firmware too small or missing .bin in assets/firmware/';
   String get firmwareUploadDone => isZh ? '上传完成' : 'Upload finished';
   String get firmwareUploadFailed => isZh ? '上传失败' : 'Upload failed';
+  String get firmwareUploadTimeoutHint => isZh
+      ? '上传超时，但设备可能已完成升级并重启。请重新连接 FUNLIGHT 后读取版本确认。'
+      : 'Upload timed out; the device may have rebooted after OTA. Reconnect to FUNLIGHT and verify the version.';
   String get firmwareSuccessReboot =>
       isZh ? '设备将重启并完成 OTA，请稍候重新连接。' : 'Device will reboot; reconnect shortly.';
 }

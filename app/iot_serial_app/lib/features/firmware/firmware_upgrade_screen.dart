@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -13,6 +14,7 @@ import '../../core/firmware/firmware_asset_loader.dart';
 import '../../core/firmware/firmware_catalog.dart';
 import '../../core/firmware/firmware_target_chip.dart';
 import '../../core/firmware/fun_ap_ota_client.dart';
+import '../../core/firmware/ota_debug_log.dart';
 import '../../core/settings/app_strings.dart';
 
 class FirmwareUpgradeScreen extends ConsumerStatefulWidget {
@@ -93,8 +95,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       _probeError = null;
       _deviceInfo = null;
     });
+    final client = FunApOtaClient();
     try {
-      final client = FunApOtaClient();
       ApDeviceInfo? parsed;
 
       try {
@@ -127,6 +129,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         _probeBusy = false;
         _probeError = '$e';
       });
+    } finally {
+      client.close();
     }
   }
 
@@ -160,18 +164,29 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       _uploadStatus = strings.firmwareUploading;
     });
 
+    final uploadSw = Stopwatch()..start();
+    otaLogPhase(
+      'upload_start',
+      detail:
+          'product=${entry.productId} uploadFile=${entry.otaUploadFilename} '
+          'device=${_deviceInfo?.product ?? "?"}',
+    );
+
+    final client = FunApOtaClient();
     try {
       final bytes = await _firmwareLoader.loadFirmwarePlainBytes(entry);
 
-      final client = FunApOtaClient();
-      final streamed = await client.uploadFirmware(
-        bytes,
-        filename: entry.otaUploadFilename,
-      );
-      final response = await http.Response.fromStream(streamed);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('HTTP ${response.statusCode}');
+      final status = await client
+          .uploadFirmwareComplete(
+            bytes,
+            filename: entry.otaUploadFilename,
+          )
+          .timeout(kOtaUploadTotalTimeout);
+      if (status < 200 || status >= 300) {
+        throw StateError('HTTP $status');
       }
+
+      otaLogPhase('upload_ok', elapsed: uploadSw.elapsed);
 
       if (!mounted) return;
       setState(() {
@@ -181,18 +196,36 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.firmwareSuccessReboot)));
       }
-    } catch (e) {
+    } on TimeoutException catch (e, st) {
+      otaLogPhase('upload_timeout', detail: '$e', elapsed: uploadSw.elapsed);
+      otaLog('upload_timeout stack', error: e, stackTrace: st);
+      if (!mounted) return;
+      setState(() {
+        _uploadBusy = false;
+        _uploadStatus = strings.firmwareUploadTimeoutHint;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.firmwareUploadTimeoutHint)),
+        );
+      }
+    } catch (e, st) {
+      otaLogPhase('upload_fail', detail: '$e', elapsed: uploadSw.elapsed);
+      otaLog('upload_fail stack', error: e, stackTrace: st);
       if (!mounted) return;
       setState(() {
         _uploadBusy = false;
         _uploadStatus = '${strings.firmwareUploadFailed}: $e';
       });
+    } finally {
+      client.close();
     }
   }
 
   @override
   void initState() {
     super.initState();
+    otaLogPhase('firmware_screen_open');
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshNetwork());
   }
 
