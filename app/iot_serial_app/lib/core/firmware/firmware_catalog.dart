@@ -1,10 +1,11 @@
 import 'firmware_target_chip.dart';
 
-/// 内置 OTA 固件清单（与 myproject/ota_dist 及 assets/firmware/ 文件名一致）。
+/// 内置 OTA 固件清单（与 assets/firmware/*.bin.enc 及 ota_upload 文件名一致）。
 class FirmwareCatalogEntry {
   const FirmwareCatalogEntry({
     required this.productId,
     required this.assetPath,
+    required this.otaUploadFilename,
     required this.titleZh,
     required this.titleEn,
     required this.descriptionZh,
@@ -15,8 +16,11 @@ class FirmwareCatalogEntry {
   /// 网页 /system 中的「产品型号」或「产品」字符串，用于匹配当前设备。
   final String productId;
 
-  /// pubspec 中的 assets 路径。
+  /// pubspec 中的 assets 路径（发布用 `.bin.enc`；明文开发时改为 `.bin`）。
   final String assetPath;
+
+  /// OTA multipart 上传文件名（设备侧仍为 `.bin`）。
+  final String otaUploadFilename;
 
   final String titleZh;
   final String titleEn;
@@ -70,11 +74,12 @@ const _multiS3Zh =
 const _multiS3En =
     'Multi USB-CDC. WiFi/TCP stable transfer, larger payloads, ~30–100 ms WiFi latency typical. Same-chip interchange with other FL-WIFI / FUN-UART per docs.';
 
-/// 固定 8 项；占位 .bin 需替换为 ota_dist 编译产物。
+/// 固定 8 项 FUN/FL 固件。
 const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   FirmwareCatalogEntry(
     productId: 'FL-WIFI-C3',
-    assetPath: 'assets/firmware/FL-WIFI-C3.bin',
+    assetPath: 'assets/firmware/FL-WIFI-C3.bin.enc',
+    otaUploadFilename: 'FL-WIFI-C3.bin',
     titleZh: 'FL-WIFI-C3',
     titleEn: 'FL-WIFI-C3',
     descriptionZh: _dtuC3Zh,
@@ -83,7 +88,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FUN-UART-C3',
-    assetPath: 'assets/firmware/FUN-UART-C3.bin',
+    assetPath: 'assets/firmware/FUN-UART-C3.bin.enc',
+    otaUploadFilename: 'FUN-UART-C3.bin',
     titleZh: 'FUN-UART-C3',
     titleEn: 'FUN-UART-C3',
     descriptionZh: _espnowC3Zh,
@@ -92,7 +98,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FL-WIFI-S2',
-    assetPath: 'assets/firmware/FL-WIFI-S2.bin',
+    assetPath: 'assets/firmware/FL-WIFI-S2.bin.enc',
+    otaUploadFilename: 'FL-WIFI-S2.bin',
     titleZh: 'FL-WIFI-S2',
     titleEn: 'FL-WIFI-S2',
     descriptionZh: _dtuS2Zh,
@@ -101,7 +108,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FL-WIFI-S3USBDEV-N4',
-    assetPath: 'assets/firmware/FL-WIFI-S3USBDEV-N4.bin',
+    assetPath: 'assets/firmware/FL-WIFI-S3USBDEV-N4.bin.enc',
+    otaUploadFilename: 'FL-WIFI-S3USBDEV-N4.bin',
     titleZh: 'FL-WIFI-S3USBDEV-N4',
     titleEn: 'FL-WIFI-S3USBDEV-N4',
     descriptionZh: _dtuS3Zh,
@@ -110,7 +118,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FUN-UART-S2',
-    assetPath: 'assets/firmware/FUN-UART-S2.bin',
+    assetPath: 'assets/firmware/FUN-UART-S2.bin.enc',
+    otaUploadFilename: 'FUN-UART-S2.bin',
     titleZh: 'FUN-UART-S2',
     titleEn: 'FUN-UART-S2',
     descriptionZh: _espnowS2Zh,
@@ -119,7 +128,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FUN-UART-S3',
-    assetPath: 'assets/firmware/FUN-UART-S3.bin',
+    assetPath: 'assets/firmware/FUN-UART-S3.bin.enc',
+    otaUploadFilename: 'FUN-UART-S3.bin',
     titleZh: 'FUN-UART-S3',
     titleEn: 'FUN-UART-S3',
     descriptionZh: _espnowS3Zh,
@@ -128,7 +138,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FL-WIFI-S2COM',
-    assetPath: 'assets/firmware/FL-WIFI-S2COM.bin',
+    assetPath: 'assets/firmware/FL-WIFI-S2COM.bin.enc',
+    otaUploadFilename: 'FL-WIFI-S2COM.bin',
     titleZh: 'FL-WIFI-S2COM',
     titleEn: 'FL-WIFI-S2COM',
     descriptionZh: _multiS2Zh,
@@ -137,7 +148,8 @@ const List<FirmwareCatalogEntry> kFirmwareCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'FL-WIFI-S3COM',
-    assetPath: 'assets/firmware/FL-WIFI-S3COM.bin',
+    assetPath: 'assets/firmware/FL-WIFI-S3COM.bin.enc',
+    otaUploadFilename: 'FL-WIFI-S3COM.bin',
     titleZh: 'FL-WIFI-S3COM',
     titleEn: 'FL-WIFI-S3COM',
     descriptionZh: _multiS3Zh,

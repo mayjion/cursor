@@ -92,8 +92,8 @@ class AppStrings {
 
   String get firmwareUploading => isZh ? '正在上传…' : 'Uploading…';
   String get firmwarePlaceholderError =>
-      isZh ? '内置固件过小或未替换：请将 ota_dist 编译的 .bin 放入 assets/firmware/'
-          : 'Bundled firmware too small: copy real .bin from ota_dist to assets/firmware/';
+      isZh ? '内置固件过小或未放入 assets/firmware/ 对应 .bin'
+          : 'Bundled firmware too small or missing .bin in assets/firmware/';
   String get firmwareUploadDone => isZh ? '上传完成' : 'Upload finished';
   String get firmwareUploadFailed => isZh ? '上传失败' : 'Upload failed';
   String get firmwareSuccessReboot =>

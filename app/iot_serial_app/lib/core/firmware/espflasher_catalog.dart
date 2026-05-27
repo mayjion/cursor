@@ -6,11 +6,12 @@ const _espFlasherZh =
 const _espFlasherEn =
     'ESPFlasher self OTA (V4 and V16 are not interchangeable). Double-click IO0 within 10s after boot, connect FUNLIGHT, then upload.';
 
-/// 与 assets/firmware/ESPFLASHER_*.bin 及设备 /info product 一致。
+/// 与 assets/firmware/ESPFLASHER_*.bin.enc 及设备 /info product 一致。
 const List<FirmwareCatalogEntry> kEspFlasherCatalog = [
   FirmwareCatalogEntry(
     productId: 'ESPFLASHER_V4',
-    assetPath: 'assets/firmware/ESPFLASHER_V4.bin',
+    assetPath: 'assets/firmware/ESPFLASHER_V4.bin.enc',
+    otaUploadFilename: 'ESPFLASHER_V4.bin',
     titleZh: 'ESPFlasher V1.1 (4MB / N4)',
     titleEn: 'ESPFlasher V1.1 (4MB / N4)',
     descriptionZh: _espFlasherZh,
@@ -19,7 +20,8 @@ const List<FirmwareCatalogEntry> kEspFlasherCatalog = [
   ),
   FirmwareCatalogEntry(
     productId: 'ESPFLASHER_V16',
-    assetPath: 'assets/firmware/ESPFLASHER_V16.bin',
+    assetPath: 'assets/firmware/ESPFLASHER_V16.bin.enc',
+    otaUploadFilename: 'ESPFLASHER_V16.bin',
     titleZh: 'ESPFlasher V1.1 (16MB / N16R8)',
     titleEn: 'ESPFlasher V1.1 (16MB / N16R8)',
     descriptionZh: _espFlasherZh,

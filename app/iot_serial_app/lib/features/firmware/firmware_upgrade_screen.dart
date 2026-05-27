@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/firmware/ap_device_family.dart';
 import '../../core/firmware/ap_device_info.dart';
 import '../../core/firmware/espflasher_catalog.dart';
+import '../../core/firmware/firmware_asset_loader.dart';
 import '../../core/firmware/firmware_catalog.dart';
 import '../../core/firmware/firmware_target_chip.dart';
 import '../../core/firmware/fun_ap_ota_client.dart';
@@ -35,6 +35,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
   FirmwareCatalogEntry? _selected;
   bool _uploadBusy = false;
   String? _uploadStatus;
+
+  final FirmwareAssetLoader _firmwareLoader = FirmwareAssetLoader();
 
   Future<void> _refreshNetwork() async {
     setState(() {
@@ -159,16 +161,12 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
     });
 
     try {
-      final data = await rootBundle.load(entry.assetPath);
-      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      if (bytes.length < 1024) {
-        throw StateError(strings.firmwarePlaceholderError);
-      }
+      final bytes = await _firmwareLoader.loadFirmwarePlainBytes(entry);
 
       final client = FunApOtaClient();
       final streamed = await client.uploadFirmware(
         bytes,
-        filename: entry.assetPath.split('/').last,
+        filename: entry.otaUploadFilename,
       );
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode < 200 || response.statusCode >= 300) {

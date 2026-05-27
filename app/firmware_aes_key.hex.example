@@ -1,0 +1,11 @@
+# 复制为 firmware_aes_key.hex 并填入 64 位十六进制（32 字节 AES-256 密钥）
+# 位置: 与 iot_serial_app 同级目录（即 cursor/app/firmware_aes_key.hex）
+#
+# 生成随机密钥:
+#   openssl rand -hex 32
+# 或:
+#   cd iot_serial_app && ./encrypt_firmware_assets.sh --init-key
+#
+# 勿将 firmware_aes_key.hex 提交到 Git
+
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

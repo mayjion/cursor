@@ -60,6 +60,9 @@ dependencies:
   http: ^1.2.2
   network_info_plus: ^6.1.0
 
+  # Encrypted firmware assets (AES-256-GCM)
+  cryptography: ^2.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

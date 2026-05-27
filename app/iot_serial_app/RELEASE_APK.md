@@ -13,12 +13,55 @@ cd /path/to/iot_serial_app
 flutter pub get
 ```
 
-## 一键生成 Release APK
+## 固件资源加密（发布前必做）
 
-在项目根目录执行：
+内置 OTA 固件以 **AES-256-GCM** 密文 `assets/firmware/*.bin.enc` 打入 APK，**不得**包含明文 `.bin`。
+
+生产密钥文件（与 `iot_serial_app` **同级目录**）：
+
+- `../firmware_aes_key.hex` — 64 位十六进制，**勿提交 Git**（已 gitignore）
+- 模板：`../firmware_aes_key.hex.example`
+
+### 一键加密并打包（推荐）
 
 ```bash
-flutter build apk --release
+cd /path/to/iot_serial_app
+
+# 首次：在上一级目录生成随机密钥
+./encrypt_firmware_assets.sh --init-key
+
+# 将明文 .bin 放入 assets/firmware/ 后执行（默认：加密 + 校验 + release APK）
+./encrypt_firmware_assets.sh
+
+# 仅加密，不打包
+./encrypt_firmware_assets.sh --no-build
+
+# 已有 .bin.enc，只打 APK
+./encrypt_firmware_assets.sh --apk-only
+
+# 分架构 APK（体积更小）
+./encrypt_firmware_assets.sh --split-per-abi
+```
+
+本地 debug 未设置 `FIRMWARE_AES_KEY_HEX` 时使用开发钥（见 `lib/core/firmware/firmware_key.dart`），**禁止**用开发钥打外发 release。
+
+自检：解压 APK，确认 `flutter_assets/assets/firmware/` 下仅有 `.bin.enc`，无 `.bin`。
+
+## 单独打 Release APK（已加密时）
+
+若资源已加密，可直接：
+
+```bash
+./encrypt_firmware_assets.sh --apk-only
+```
+
+或手动：
+
+```bash
+KEY=$(grep -v '^#' ../firmware_aes_key.hex | tr -d ' \n')
+flutter build apk --release \
+  --dart-define=FIRMWARE_AES_KEY_HEX=$KEY \
+  --obfuscate --split-debug-info=build/symbols
 ```
 
 ### 产物位置
