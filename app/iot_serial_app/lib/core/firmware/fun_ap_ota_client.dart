@@ -14,10 +14,10 @@ const String kExpectedApGateway = '192.168.4.1';
 const Duration kOtaConnectTimeout = Duration(seconds: 20);
 
 /// 发完 body 后等设备写 flash 并返回 HTTP 头（软 AP 可能较慢）。
-const Duration kOtaResponseWaitTimeout = Duration(seconds: 90);
+const Duration kOtaResponseWaitTimeout = Duration(seconds: 120);
 
-/// 整次上传硬上限。
-const Duration kOtaUploadTotalTimeout = Duration(minutes: 5);
+/// 整次上传硬上限（SoftAP 下 1MB 可能需 10+ 分钟）。
+const Duration kOtaUploadTotalTimeout = Duration(minutes: 15);
 
 /// 已发完 body 后断连/超时，且已等待超过此时长 → 视为 OTA 可能已成功（设备常已重启）。
 const Duration kOtaAssumeSuccessAfterBody = Duration(seconds: 40);
@@ -37,7 +37,8 @@ class FunApOtaClient {
   static HttpClient _newHttpClient() {
     final httpClient = HttpClient();
     httpClient.connectionTimeout = kOtaConnectTimeout;
-    httpClient.idleTimeout = const Duration(seconds: 5);
+    /* OTA 上传时 TCP 可能因设备 flash 写入而背压，idle 过短会断连 */
+    httpClient.idleTimeout = const Duration(minutes: 2);
     return httpClient;
   }
 
@@ -144,9 +145,9 @@ class FunApOtaClient {
           }
         }
       }().timeout(
-        const Duration(minutes: 4),
+        const Duration(minutes: 12),
         onTimeout: () {
-          throw TimeoutException('OTA body upload exceeded 4 minutes (sent $sent/${body.length})');
+          throw TimeoutException('OTA body upload exceeded 12 minutes (sent $sent/${body.length})');
         },
       );
       bodyFullySent = sent == body.length;

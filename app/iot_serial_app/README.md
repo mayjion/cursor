@@ -30,6 +30,96 @@ lib/
 - 在项目根目录执行：`flutter run`
 - 需真机或模拟器开启蓝牙；Android 需 BLUETOOTH_SCAN/CONNECT 等权限，iOS 需 NSBluetoothAlwaysUsageDescription
 
+## 打包
+
+在项目根目录 `iot_serial_app` 下执行。首次打包前先拉依赖：
+
+```bash
+flutter pub get
+```
+
+### Android Release APK（推荐）
+
+内置 OTA 固件须以密文 `*.bin.enc` 打入 APK，不得包含明文 `.bin`。生产密钥放在与项目**同级**目录：`../firmware_aes_key.hex`（模板见 `../firmware_aes_key.hex.example`，勿提交 Git）。
+
+**一键加密并打包**（默认：加密 → 校验 → release APK）：
+
+```bash
+# 首次：在上一级目录生成随机密钥
+./encrypt_firmware_assets.sh --init-key
+
+# 将明文 .bin 放入 assets/firmware/ 后执行
+./encrypt_firmware_assets.sh
+
+# 仅加密，不打包
+./encrypt_firmware_assets.sh --no-build
+
+# 已有 .bin.enc，只打 APK
+./encrypt_firmware_assets.sh --apk-only
+
+# 按 CPU 架构分包（体积更小，真机多为 arm64-v8a）
+./encrypt_firmware_assets.sh --split-per-abi
+```
+
+产物目录：`build/app/outputs/flutter-apk/`（单包为 `app-release.apk`；分架构为 `app-*-release.apk`）。
+
+资源已加密时，也可直接：
+
+```bash
+./encrypt_firmware_assets.sh --apk-only
+```
+
+或手动（需已配置 `../firmware_aes_key.hex`）：
+
+```bash
+KEY=$(grep -v '^#' ../firmware_aes_key.hex | tr -d ' \n')
+flutter build apk --release \
+  --dart-define=FIRMWARE_AES_KEY_HEX=$KEY \
+  --obfuscate --split-debug-info=build/symbols
+```
+
+**Google Play 上架**（App Bundle）：
+
+```bash
+flutter build appbundle --release
+```
+
+产物：`build/app/outputs/bundle/release/app-release.aab`
+
+**版本号**：`pubspec.yaml` 中 `version: 1.0.0+1`；构建时可覆盖：
+
+```bash
+flutter build apk --release --build-name=1.0.1 --build-number=2
+```
+
+**清理后重编**：
+
+```bash
+flutter clean && flutter pub get && ./encrypt_firmware_assets.sh
+```
+
+安装到已连接设备（调试）：
+
+```bash
+flutter install --release
+```
+
+更完整的说明（签名、自检、命令表）见 [RELEASE_APK.md](RELEASE_APK.md)。
+
+### iOS
+
+需在 macOS 上配置 Xcode 与证书后执行：
+
+```bash
+flutter build ipa --release
+```
+
+或仅编译不导出 IPA：
+
+```bash
+flutter build ios --release
+```
+
 ## 与固件协议对齐
 
 - **SOF** = 0xAA
