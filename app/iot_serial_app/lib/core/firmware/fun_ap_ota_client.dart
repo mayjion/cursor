@@ -13,18 +13,25 @@ const String kExpectedApGateway = '192.168.4.1';
 
 const Duration kOtaConnectTimeout = Duration(seconds: 20);
 
-/// 发完 body 后等设备写 flash 并返回 HTTP 头（软 AP 可能较慢）。
-const Duration kOtaResponseWaitTimeout = Duration(seconds: 120);
+/// 发完 body 后等设备接收、写 flash 并返回 HTTP 头（软 AP 大固件可能很慢）。
+const Duration kOtaResponseWaitTimeout = Duration(minutes: 12);
 
-/// 整次上传硬上限（SoftAP 下 1MB 可能需 10+ 分钟）。
-const Duration kOtaUploadTotalTimeout = Duration(minutes: 15);
+/// 整次上传硬上限（SoftAP 下 1MB+ 可能需 10+ 分钟）。
+const Duration kOtaUploadTotalTimeout = Duration(minutes: 20);
 
-/// 已发完 body 后断连/超时，且已等待超过此时长 → 视为 OTA 可能已成功（设备常已重启）。
-const Duration kOtaAssumeSuccessAfterBody = Duration(seconds: 40);
+/// body 全部发出后，至少再等待此时长才允许因断连/超时推断 OTA 成功（避免 TCP 尾包未收完就提示完成）。
+const Duration kOtaAssumeSuccessMinAfterBody = Duration(seconds: 120);
 
 const Duration kOtaResponseBodyTimeout = Duration(seconds: 8);
 
 const int _uploadChunkSize = 16 * 1024;
+
+enum OtaUploadPhase {
+  uploadingBody,
+  awaitingDevice,
+}
+
+typedef OtaUploadPhaseCallback = void Function(OtaUploadPhase phase);
 
 class FunApOtaClient {
   FunApOtaClient({http.Client? client})
@@ -88,6 +95,7 @@ class FunApOtaClient {
   Future<int> uploadFirmwareComplete(
     List<int> firmwareBytes, {
     required String filename,
+    OtaUploadPhaseCallback? onPhase,
   }) async {
     final uri = Uri.parse('$kFunApBaseUrl/ota_upload');
     final boundary = '----FunAp${DateTime.now().microsecondsSinceEpoch}${Random().nextInt(1 << 20)}';
@@ -108,8 +116,10 @@ class FunApOtaClient {
     final sw = Stopwatch()..start();
     Timer? heartbeat;
     var bodyFullySent = false;
+    Duration? bodyDoneAt;
 
     try {
+      onPhase?.call(OtaUploadPhase.uploadingBody);
       heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
         otaLogPhase(
           'http_send_waiting',
@@ -151,19 +161,21 @@ class FunApOtaClient {
         },
       );
       bodyFullySent = sent == body.length;
+      bodyDoneAt = sw.elapsed;
       otaLogPhase('http_upload_body_done', detail: 'sent=$sent', elapsed: sw.elapsed);
+      onPhase?.call(OtaUploadPhase.awaitingDevice);
 
       final HttpClientResponse response;
       try {
         response = await request.close().timeout(kOtaResponseWaitTimeout);
       } on TimeoutException catch (e) {
-        if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed)) {
+        if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed, bodyDoneAt)) {
           otaLogPhase('http_response_timeout_assume_ok', detail: '$e', elapsed: sw.elapsed);
           return 200;
         }
         rethrow;
       } on SocketException catch (e) {
-        if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed)) {
+        if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed, bodyDoneAt)) {
           otaLogPhase('http_socket_assume_ok', detail: '$e', elapsed: sw.elapsed);
           return 200;
         }
@@ -186,14 +198,14 @@ class FunApOtaClient {
 
       return status;
     } on TimeoutException catch (e) {
-      if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed)) {
+      if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed, bodyDoneAt)) {
         otaLogPhase('http_total_timeout_assume_ok', detail: '$e', elapsed: sw.elapsed);
         return 200;
       }
       otaLogPhase('http_send_fail', detail: '$e', elapsed: sw.elapsed);
       rethrow;
     } catch (e, st) {
-      if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed)) {
+      if (_mayAssumeOtaSuccess(bodyFullySent, sw.elapsed, bodyDoneAt)) {
         otaLogPhase('http_send_fail_assume_ok', detail: '$e', elapsed: sw.elapsed);
         return 200;
       }
@@ -207,8 +219,16 @@ class FunApOtaClient {
     }
   }
 
-  static bool _mayAssumeOtaSuccess(bool bodyFullySent, Duration elapsed) {
-    return bodyFullySent && elapsed >= kOtaAssumeSuccessAfterBody;
+  static bool _mayAssumeOtaSuccess(
+    bool bodyFullySent,
+    Duration elapsed,
+    Duration? bodyDoneAt,
+  ) {
+    if (!bodyFullySent || bodyDoneAt == null) {
+      return false;
+    }
+    final sinceBodyDone = elapsed - bodyDoneAt;
+    return sinceBodyDone >= kOtaAssumeSuccessMinAfterBody;
   }
 
   static List<int> _buildMultipartFirmwareBody({

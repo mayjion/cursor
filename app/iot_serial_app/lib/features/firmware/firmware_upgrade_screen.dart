@@ -9,7 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/firmware/ap_device_family.dart';
 import '../../core/firmware/ap_device_info.dart';
-import '../../core/firmware/espflasher_catalog.dart';
+import '../../core/firmware/flasher_burner_catalog.dart';
 import '../../core/firmware/firmware_asset_loader.dart';
 import '../../core/firmware/firmware_catalog.dart';
 import '../../core/firmware/firmware_target_chip.dart';
@@ -120,7 +120,7 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       final info = parsed;
       setState(() {
         _deviceInfo = info;
-        _selected = info.isEspFlasher ? espFlasherCatalogForProduct(info.product) : null;
+        _selected = info.isFlasherBurner ? flasherBurnerCatalogForProduct(info.product) : null;
         _probeBusy = false;
       });
     } catch (e) {
@@ -136,11 +136,29 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
 
   Future<void> _startUpload(FirmwareCatalogEntry entry) async {
     final strings = ref.read(appStringsProvider);
+    final device = _deviceInfo;
+    if (device != null &&
+        device.isFlasherBurner &&
+        !catalogEntryMatchesBurnerDevice(entry, device.product)) {
+      setState(() {
+        _uploadStatus = strings.firmwareBurnerMismatch;
+      });
+      return;
+    }
+
+    final crossFamily =
+        device != null && isBurnerCrossFamilyUpgrade(entry, device.product);
+    final confirmBody = crossFamily
+        ? strings.firmwareConfirmBodyCrossFamily(
+            device!.product,
+            entry.titleForLocale(isZh: strings.isZh),
+          )
+        : strings.firmwareConfirmBody(entry.titleForLocale(isZh: strings.isZh));
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(strings.firmwareConfirmTitle),
-        content: Text(strings.firmwareConfirmBody(entry.titleForLocale(isZh: strings.isZh))),
+        content: Text(confirmBody),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.firmwareCancel)),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.firmwareConfirmUpload)),
@@ -148,16 +166,6 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-
-    final device = _deviceInfo;
-    if (device != null &&
-        device.isEspFlasher &&
-        !catalogEntryMatchesDeviceProduct(entry, device.product)) {
-      setState(() {
-        _uploadStatus = strings.firmwareEspFlasherMismatch;
-      });
-      return;
-    }
 
     setState(() {
       _uploadBusy = true;
@@ -180,6 +188,14 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
           .uploadFirmwareComplete(
             bytes,
             filename: entry.otaUploadFilename,
+            onPhase: (phase) {
+              if (!mounted) return;
+              setState(() {
+                _uploadStatus = phase == OtaUploadPhase.awaitingDevice
+                    ? strings.firmwareUploadingDevice
+                    : strings.firmwareUploading;
+              });
+            },
           )
           .timeout(kOtaUploadTotalTimeout);
       if (status < 200 || status >= 300) {
@@ -235,8 +251,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
     final chip = _deviceInfo?.inferredChip;
     final entries = _deviceInfo == null
         ? <FirmwareCatalogEntry>[]
-        : (_deviceInfo!.isEspFlasher
-            ? espFlasherCatalogEntriesForDevice(_deviceInfo!.product)
+        : (_deviceInfo!.isFlasherBurner
+            ? flasherBurnerCatalogEntriesForDevice(_deviceInfo!.product)
             : (chip == null ? <FirmwareCatalogEntry>[] : catalogForChip(chip)));
 
     return Scaffold(
@@ -333,8 +349,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _deviceInfo!.isEspFlasher
-                  ? strings.firmwarePickFirmwareEspFlasher
+              _deviceInfo!.isFlasherBurner
+                  ? strings.firmwarePickFirmwareBurner
                   : strings.firmwarePickFirmware,
               style: Theme.of(context).textTheme.titleSmall,
             ),

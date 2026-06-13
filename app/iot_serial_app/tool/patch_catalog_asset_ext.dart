@@ -12,6 +12,7 @@ void main(List<String> args) {
   final files = [
     'lib/core/firmware/firmware_catalog.dart',
     'lib/core/firmware/espflasher_catalog.dart',
+    'lib/core/firmware/pyflasher_catalog.dart',
   ];
   final pattern = mode == 'enc'
       ? RegExp(r"assetPath: 'assets/firmware/([^']+)\.bin'")

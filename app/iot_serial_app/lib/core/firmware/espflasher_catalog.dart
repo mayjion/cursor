@@ -1,10 +1,19 @@
 import 'firmware_catalog.dart';
 import 'firmware_target_chip.dart';
 
+const _espFlasherSupportedZh =
+    '支持烧录 DUT 芯片：ESP8266、ESP32、ESP32-S2、ESP32-S3、ESP32-C2/C3/C5/C6、ESP32-H2、ESP32-P4（UART 下载）。';
+const _espFlasherSupportedEn =
+    'Supported DUT chips: ESP8266, ESP32, ESP32-S2, ESP32-S3, ESP32-C2/C3/C5/C6, ESP32-H2, ESP32-P4 (UART download).';
+
 const _espFlasherZh =
-    '烧录器自身固件 OTA（V4 与 V16 不可互刷）。上电 10 秒内双击 IO0 进入升级模式，连接 FUNLIGHT 后上传。';
+    'ESP 烧录器固件 OTA（V4 与 V16 不可互刷）。与 PYFlasher 同分区，可与 PYFLASHER_V* 交叉升级。\n'
+    '$_espFlasherSupportedZh\n'
+    '上电 10 秒内双击按键进入升级模式，连接 FUNLIGHT 后上传。';
 const _espFlasherEn =
-    'ESPFlasher self OTA (V4 and V16 are not interchangeable). Double-click IO0 within 10s after boot, connect FUNLIGHT, then upload.';
+    'ESPFlasher OTA (V4 and V16 are not interchangeable). Same partition as PYFlasher; cross-flash with PYFLASHER_V* is supported.\n'
+    '$_espFlasherSupportedEn\n'
+    'Double-click the button within 10s after boot, connect FUNLIGHT, then upload.';
 
 /// 与 assets/firmware/ESPFLASHER_*.bin.enc 及设备 /info product 一致。
 const List<FirmwareCatalogEntry> kEspFlasherCatalog = [
@@ -12,8 +21,8 @@ const List<FirmwareCatalogEntry> kEspFlasherCatalog = [
     productId: 'ESPFLASHER_V4',
     assetPath: 'assets/firmware/ESPFLASHER_V4.bin.enc',
     otaUploadFilename: 'ESPFLASHER_V4.bin',
-    titleZh: 'ESPFlasher V1.1 (4MB / N4)',
-    titleEn: 'ESPFlasher V1.1 (4MB / N4)',
+    titleZh: 'ESPFlasher（4MB / N4）',
+    titleEn: 'ESPFlasher (4MB / N4)',
     descriptionZh: _espFlasherZh,
     descriptionEn: _espFlasherEn,
     targetChip: FirmwareTargetChip.esp32s3,
@@ -22,8 +31,8 @@ const List<FirmwareCatalogEntry> kEspFlasherCatalog = [
     productId: 'ESPFLASHER_V16',
     assetPath: 'assets/firmware/ESPFLASHER_V16.bin.enc',
     otaUploadFilename: 'ESPFLASHER_V16.bin',
-    titleZh: 'ESPFlasher V1.1 (16MB / N16R8)',
-    titleEn: 'ESPFlasher V1.1 (16MB / N16R8)',
+    titleZh: 'ESPFlasher（16MB / N16R8）',
+    titleEn: 'ESPFlasher (16MB / N16R8)',
     descriptionZh: _espFlasherZh,
     descriptionEn: _espFlasherEn,
     targetChip: FirmwareTargetChip.esp32s3,

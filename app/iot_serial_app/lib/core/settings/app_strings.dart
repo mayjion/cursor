@@ -49,8 +49,8 @@ class AppStrings {
       ? '请先连接设备热点（FUN 系列或烧录器 FUNLIGHT，网关多为 192.168.4.1），再读取设备信息并选择内置固件上传。'
       : 'Connect to the device AP (FUN series or flasher FUNLIGHT, gateway usually 192.168.4.1), fetch info, then upload.';
   String get firmwareEspFlasherHint => isZh
-      ? '烧录器：上电 10 秒内双击按键进入升级模式（全部 LED 亮），WiFi FUNLIGHT / funlight。硬件型号 ESPFLASHER_V4（4MB）或 ESPFLASHER_V16（16MB），软件版本如 V1.0。'
-      : 'Flasher: double-click within 10s after boot (all LEDs on). WiFi FUNLIGHT / funlight. Models ESPFLASHER_V4 (4MB) or ESPFLASHER_V16 (16MB), SW e.g. V1.0.';
+      ? '烧录器：上电 10 秒内双击按键进入升级模式（全部 LED 亮），WiFi FUNLIGHT / funlight。硬件型号 ESPFLASHER_V4/V16 或 PYFLASHER_V4/V16（同 Flash 变体可交叉升级）。'
+      : 'Flasher: double-click within 10s after boot (all LEDs on). WiFi FUNLIGHT / funlight. Models ESPFLASHER_V4/V16 or PYFLASHER_V4/V16 (cross-flash within same flash variant).';
 
   String get firmwareNetworkSection => isZh ? '当前网络' : 'Network';
   String get firmwareSsidLabel => isZh ? 'WiFi：' : 'WiFi: ';
@@ -74,11 +74,16 @@ class AppStrings {
   String get firmwareChipS3 => 'ESP32-S3';
 
   String get firmwareVariantLabel => isZh ? '变体：' : 'Variant: ';
-  String get firmwarePickFirmwareEspFlasher =>
-      isZh ? '可选固件（须与硬件型号一致）' : 'Firmware (must match hardware model)';
-  String get firmwareEspFlasherMismatch => isZh
-      ? '所选固件与设备硬件型号不匹配（V4/V16 不可互刷）'
-      : 'Selected firmware does not match device model (V4/V16 not interchangeable)';
+  String get firmwarePickFirmwareBurner => isZh
+      ? '可选固件（须同 Flash 变体；ESP ↔ PY 可交叉升级）'
+      : 'Firmware (same flash variant; ESP ↔ PY cross-flash OK)';
+  String get firmwareBurnerMismatch => isZh
+      ? '所选固件与设备 Flash 变体不匹配（V4 与 V16 不可互刷）'
+      : 'Selected firmware does not match flash variant (V4/V16 not interchangeable)';
+
+  String firmwareConfirmBodyCrossFamily(String fromProduct, String toName) => isZh
+      ? '将把设备从 $fromProduct 切换为「$toName」。ESP 与 PY 烧录器共用分区，离线项目数据可能失效，请确认。'
+      : 'Switch device from $fromProduct to「$toName」. ESP and PY flashers share partitions; offline projects may be invalid. Continue?';
 
   String get firmwarePickFirmware => isZh ? '可选固件（同芯片）' : 'Compatible firmware';
   String get firmwareStartUpload => isZh ? '上传到设备' : 'Upload to device';
@@ -91,16 +96,18 @@ class AppStrings {
   String get firmwareConfirmUpload => isZh ? '上传' : 'Upload';
 
   String get firmwareUploading => isZh ? '正在上传…' : 'Uploading…';
+  String get firmwareUploadingDevice =>
+      isZh ? '上传完成，正在等待设备写入 Flash…' : 'Upload sent; waiting for device to write flash…';
   String get firmwarePlaceholderError =>
       isZh ? '内置固件过小或未放入 assets/firmware/ 对应 .bin'
           : 'Bundled firmware too small or missing .bin in assets/firmware/';
-  String get firmwareUploadDone => isZh ? '上传完成' : 'Upload finished';
+  String get firmwareUploadDone => isZh ? '升级完成，设备将重启' : 'Upgrade complete; device rebooting';
   String get firmwareUploadFailed => isZh ? '上传失败' : 'Upload failed';
   String get firmwareUploadTimeoutHint => isZh
-      ? '上传超时，但设备可能已完成升级并重启。请重新连接 FUNLIGHT 后读取版本确认。'
-      : 'Upload timed out; the device may have rebooted after OTA. Reconnect to FUNLIGHT and verify the version.';
+      ? '等待设备完成 OTA 超时。请重新连接 FUNLIGHT 后读取版本确认是否已成功。'
+      : 'Timed out waiting for the device to finish OTA. Reconnect to FUNLIGHT and verify the version.';
   String get firmwareSuccessReboot =>
-      isZh ? '设备将重启并完成 OTA，请稍候重新连接。' : 'Device will reboot; reconnect shortly.';
+      isZh ? '设备正在重启，请稍候重新连接 FUNLIGHT 并读取版本确认。' : 'Device is rebooting; reconnect to FUNLIGHT and verify the version.';
 }
 
 final appStringsProvider = Provider<AppStrings>((ref) {

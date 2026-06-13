@@ -17,6 +17,8 @@ copy() { cp -f "$1" "$2"; echo "  $(basename "$2")"; }
 echo "==> 从 $OTA 同步明文固件"
 copy "$OTA/ESPFLASHER-S3-N4.bin" "$DEST/ESPFLASHER_V4.bin"
 copy "$OTA/ESPFLASHER-S3-N16R8.bin" "$DEST/ESPFLASHER_V16.bin"
+copy "$OTA/PYFLASHER-S3-N4.bin" "$DEST/PYFLASHER_V4.bin"
+copy "$OTA/PYFLASHER-S3-N16R8.bin" "$DEST/PYFLASHER_V16.bin"
 for name in FL-WIFI-C3 FL-WIFI-S2 FL-WIFI-S2COM FL-WIFI-S3COM FL-WIFI-S3USBDEV-N4 \
   FUN-UART-C3 FUN-UART-S2 FUN-UART-S3; do
   copy "$OTA/$name.bin" "$DEST/$name.bin"

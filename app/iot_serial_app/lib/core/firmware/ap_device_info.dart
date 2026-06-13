@@ -22,6 +22,14 @@ class ApDeviceInfo {
     final p = product.trim().toUpperCase();
     return p == 'ESPFLASHER_V4' || p == 'ESPFLASHER_V16';
   }
+
+  bool get isPyFlasher {
+    final p = product.trim().toUpperCase();
+    return p == 'PYFLASHER_V4' || p == 'PYFLASHER_V16';
+  }
+
+  /// ESPFlasher 或 PYFlasher（共用 PCB / 分区，OTA 可交叉升级）。
+  bool get isFlasherBurner => isEspFlasher || isPyFlasher;
 }
 
 /// GET /info JSON（烧录器与部分 FUN 设备）。
