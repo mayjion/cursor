@@ -80,6 +80,9 @@ class AppStrings {
   String get firmwareBurnerMismatch => isZh
       ? '所选固件与设备 Flash 变体不匹配（V4 与 V16 不可互刷）'
       : 'Selected firmware does not match flash variant (V4/V16 not interchangeable)';
+  String get firmwareTriDtuMismatch => isZh
+      ? '所选固件与设备 Flash 变体不匹配（N4 与 N16R8 不可互刷）'
+      : 'Selected firmware does not match flash variant (N4/N16R8 not interchangeable)';
 
   String firmwareConfirmBodyCrossFamily(String fromProduct, String toName) => isZh
       ? '将把设备从 $fromProduct 切换为「$toName」。ESP 与 PY 烧录器共用分区，离线项目数据可能失效，请确认。'

@@ -15,6 +15,7 @@ import '../../core/firmware/firmware_catalog.dart';
 import '../../core/firmware/firmware_target_chip.dart';
 import '../../core/firmware/fun_ap_ota_client.dart';
 import '../../core/firmware/ota_debug_log.dart';
+import '../../core/firmware/tri_dtu_catalog.dart';
 import '../../core/settings/app_strings.dart';
 
 class FirmwareUpgradeScreen extends ConsumerStatefulWidget {
@@ -120,7 +121,13 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
       final info = parsed;
       setState(() {
         _deviceInfo = info;
-        _selected = info.isFlasherBurner ? flasherBurnerCatalogForProduct(info.product) : null;
+        if (info.isFlasherBurner) {
+          _selected = flasherBurnerCatalogForProduct(info.product);
+        } else if (info.isTriDtu) {
+          _selected = triDtuCatalogForProduct(info.product);
+        } else {
+          _selected = null;
+        }
         _probeBusy = false;
       });
     } catch (e) {
@@ -142,6 +149,14 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         !catalogEntryMatchesBurnerDevice(entry, device.product)) {
       setState(() {
         _uploadStatus = strings.firmwareBurnerMismatch;
+      });
+      return;
+    }
+    if (device != null &&
+        device.isTriDtu &&
+        !catalogEntryMatchesTriDtuDevice(entry, device.product)) {
+      setState(() {
+        _uploadStatus = strings.firmwareTriDtuMismatch;
       });
       return;
     }
@@ -253,7 +268,9 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         ? <FirmwareCatalogEntry>[]
         : (_deviceInfo!.isFlasherBurner
             ? flasherBurnerCatalogEntriesForDevice(_deviceInfo!.product)
-            : (chip == null ? <FirmwareCatalogEntry>[] : catalogForChip(chip)));
+            : _deviceInfo!.isTriDtu
+                ? triDtuCatalogEntriesForDevice(_deviceInfo!.product)
+                : (chip == null ? <FirmwareCatalogEntry>[] : catalogForChip(chip)));
 
     return Scaffold(
       appBar: AppBar(

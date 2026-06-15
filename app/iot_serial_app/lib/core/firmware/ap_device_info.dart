@@ -30,6 +30,11 @@ class ApDeviceInfo {
 
   /// ESPFlasher 或 PYFlasher（共用 PCB / 分区，OTA 可交叉升级）。
   bool get isFlasherBurner => isEspFlasher || isPyFlasher;
+
+  bool get isTriDtu {
+    final p = product.trim().toUpperCase();
+    return p == 'FL-TRI-S3-N4' || p == 'FL-TRI-S3-N16R8';
+  }
 }
 
 /// GET /info JSON（烧录器与部分 FUN 设备）。
@@ -56,6 +61,9 @@ final _reDtuLine = RegExp(
   r'Version:\s*([^|]+?)\s*\|\s*产品型号:\s*([^<\n]+)',
   caseSensitive: false,
 );
+final _reTriDtuLine = RegExp(
+  r'版本[：:]\s*([^|]+?)\s*\|\s*型号[：:]\s*([^<\n]+)',
+);
 final _reProductLabel = RegExp(
   r'产品[：:]\s*([^<\n|]+)',
 );
@@ -66,6 +74,20 @@ ApDeviceInfo? parseApDeviceInfo(String html) {
   if (dtu != null) {
     final ver = dtu.group(1)?.trim();
     final prod = dtu.group(2)?.trim();
+    if (prod != null && prod.isNotEmpty) {
+      return ApDeviceInfo(
+        rawHtml: html,
+        version: ver?.isEmpty ?? true ? null : ver,
+        product: prod,
+        inferredChip: inferChipFromProduct(prod),
+      );
+    }
+  }
+
+  final tri = _reTriDtuLine.firstMatch(html);
+  if (tri != null) {
+    final ver = tri.group(1)?.trim();
+    final prod = tri.group(2)?.trim();
     if (prod != null && prod.isNotEmpty) {
       return ApDeviceInfo(
         rawHtml: html,

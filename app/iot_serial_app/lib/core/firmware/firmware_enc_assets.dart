@@ -12,6 +12,8 @@ const List<String> kRequiredFirmwareEncAssets = [
   'assets/firmware/ESPFLASHER_V16.bin.enc',
   'assets/firmware/PYFLASHER_V4.bin.enc',
   'assets/firmware/PYFLASHER_V16.bin.enc',
+  'assets/firmware/FL-TRI-S3-N4.bin.enc',
+  'assets/firmware/FL-TRI-S3-N16R8.bin.enc',
 ];
 
 /// 开发用明文固件 asset 路径（与 catalog 一致）。
@@ -28,4 +30,6 @@ const List<String> kRequiredFirmwarePlainAssets = [
   'assets/firmware/ESPFLASHER_V16.bin',
   'assets/firmware/PYFLASHER_V4.bin',
   'assets/firmware/PYFLASHER_V16.bin',
+  'assets/firmware/FL-TRI-S3-N4.bin',
+  'assets/firmware/FL-TRI-S3-N16R8.bin',
 ];
