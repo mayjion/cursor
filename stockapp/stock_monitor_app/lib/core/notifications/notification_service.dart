@@ -2,6 +2,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../models/position_signal.dart';
+
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
@@ -12,8 +14,13 @@ class NotificationService {
   static const int closeReminderId = 1001;
   static const String channelId = 'stock_close_reminder';
   static const String channelName = '收盘提醒';
+  static const String reversalChannelId = 'stock_reversal_alert';
+  static const String reversalChannelName = '趋势逆转提醒';
+  static const String signalChannelId = 'stock_signal_change';
+  static const String signalChannelName = '加减仓信号';
 
   bool _initialized = false;
+  int _nextAlertId = 2000;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -31,16 +38,33 @@ class NotificationService {
       onDidReceiveNotificationResponse: (_) {},
     );
 
-    const channel = AndroidNotificationChannel(
-      channelId,
-      channelName,
-      description: '交易日收盘后提醒刷新自选股',
-      importance: Importance.defaultImportance,
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        channelId,
+        channelName,
+        description: '交易日收盘后提醒刷新自选股',
+        importance: Importance.defaultImportance,
+      ),
     );
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        reversalChannelId,
+        reversalChannelName,
+        description: '趋势逆转高优先级提醒',
+        importance: Importance.high,
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        signalChannelId,
+        signalChannelName,
+        description: '加减仓信号变更提醒',
+        importance: Importance.defaultImportance,
+      ),
+    );
 
     _initialized = true;
   }
@@ -66,7 +90,7 @@ class NotificationService {
     await _plugin.zonedSchedule(
       closeReminderId,
       '收盘提醒',
-      '收盘了，请打开应用刷新自选股并记录今日推测',
+      '收盘了，请打开应用刷新自选股并查看加减仓信号',
       _nextWeekdayAt1505(scheduled),
       const NotificationDetails(
         android: AndroidNotificationDetails(
@@ -79,6 +103,74 @@ class NotificationService {
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> showReversalAlert({
+    required String code,
+    required String name,
+    required ReversalSeverity severity,
+    String? suggestedAction,
+  }) async {
+    await initialize();
+    final id = _nextAlertId++;
+    final (title, body) = switch (severity) {
+      ReversalSeverity.earlyWarning => (
+          '⚠ 下跌预警：$name',
+          suggestedAction ?? '建议减可变仓30-50%，暂停加仓',
+        ),
+      ReversalSeverity.confirmed => (
+          '🚨 趋势逆转：$name',
+          suggestedAction ?? '建议清空可变仓，底仓设止损',
+        ),
+      ReversalSeverity.deepDrop => (
+          '🚨 深跌保护：$name',
+          suggestedAction ?? '建议整体减仓或清仓',
+        ),
+    };
+
+    await _plugin.show(
+      id,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          reversalChannelId,
+          reversalChannelName,
+          channelDescription: '趋势逆转高优先级提醒',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+    );
+  }
+
+  Future<void> showSignalChangeAlert({
+    required String code,
+    required String name,
+    required PositionSignalType signalType,
+    String? suggestedAction,
+  }) async {
+    await initialize();
+    final id = _nextAlertId++;
+    final label = switch (signalType) {
+      PositionSignalType.add => '加仓信号',
+      PositionSignalType.reduce => '减仓信号',
+      PositionSignalType.trendBreak => '下跌预警',
+      PositionSignalType.trendReversal => '趋势逆转',
+      _ => '信号变更',
+    };
+    await _plugin.show(
+      id,
+      '$label：$name',
+      suggestedAction ?? '$code 出现新的30日加减仓信号',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          signalChannelId,
+          signalChannelName,
+          channelDescription: '加减仓信号变更',
+        ),
+      ),
     );
   }
 

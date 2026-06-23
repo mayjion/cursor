@@ -3,16 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/capital_flow_day.dart';
 import '../../core/models/capital_flow_point.dart';
+import '../../core/models/position_signal_record.dart';
+import '../../core/models/stock_bar.dart';
 import '../../core/models/today_flow_display.dart';
-import '../../core/settings/app_settings.dart';
-import '../../core/models/prediction_direction.dart';
-import '../../core/models/prediction_record.dart';
+import '../../core/position/position_signal_analyzer.dart';
 import '../../core/providers/stock_providers.dart';
-import '../../core/prediction/prediction_analyzer.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/settings/app_theme.dart';
 import '../../core/storage/flow_cache_storage.dart';
-import '../../core/storage/prediction_storage.dart';
+import '../../core/storage/position_signal_storage.dart';
 import '../../core/storage/watchlist_storage.dart';
 import 'flow_charts.dart';
 
@@ -28,7 +27,7 @@ class StockDetailScreen extends ConsumerStatefulWidget {
 class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
   List<CapitalFlowDay> _flows = [];
   List<CapitalFlowPoint> _intraday = [];
-  List<PredictionRecord> _predictions = [];
+  List<PositionSignalRecord> _signals = [];
   String _name = '';
   bool _loading = true;
 
@@ -42,10 +41,10 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
     setState(() => _loading = true);
     final stock = await WatchlistStorage.getByCode(widget.code);
     _name = stock?.name ?? widget.code;
-    final engine = ref.read(predictionEngineProvider);
+    final engine = ref.read(positionSignalEngineProvider);
     await engine.refreshStockFlows(widget.code);
     final flows = await FlowCacheStorage.listForCode(widget.code);
-    final preds = await PredictionStorage.listForCode(widget.code);
+    final signals = await PositionSignalStorage.listForCode(widget.code);
     List<CapitalFlowPoint> intraday = [];
     try {
       intraday =
@@ -55,21 +54,9 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
       setState(() {
         _flows = flows;
         _intraday = intraday;
-        _predictions = preds;
+        _signals = signals;
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _generateToday() async {
-    if (_flows.isEmpty) return;
-    final engine = ref.read(predictionEngineProvider);
-    await engine.generatePredictionForCode(widget.code, _flows, force: true);
-    await _load();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ref.read(appStringsProvider).generatePrediction)),
-      );
     }
   }
 
@@ -86,10 +73,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_name),
-            Text(
-              widget.code,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(widget.code, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
@@ -101,29 +85,19 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_todayDisplay != null) ...[
-                    _SummaryCard(
-                      display: _todayDisplay!,
-                      strings: strings,
-                    ),
+                    _SummaryCard(display: _todayDisplay!, strings: strings),
                     const SizedBox(height: 12),
-                    _AnalysisCard(
+                    _SignalAnalysisCard(
+                      code: widget.code,
                       flows: _flows,
-                      latestPrediction:
-                          _predictions.isNotEmpty ? _predictions.first : null,
+                      latestSignal:
+                          _signals.isNotEmpty ? _signals.first : null,
                       strings: strings,
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  FilledButton.tonalIcon(
-                    onPressed: _generateToday,
-                    icon: const Icon(Icons.auto_graph),
-                    label: Text(strings.generatePrediction),
-                  ),
                   const SizedBox(height: 24),
-                  Text(
-                    strings.historyFlowChart,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text(strings.historyFlowChart,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Card(
                     child: Padding(
@@ -135,10 +109,8 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    strings.intradayFlowChart,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text(strings.intradayFlowChart,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Card(
                     child: Padding(
@@ -150,22 +122,17 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    strings.predictionHistory,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text(strings.signalHistory,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  if (_predictions.isEmpty)
+                  if (_signals.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text(
-                        strings.pending,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      child: Text(strings.chartNotEnough),
                     )
                   else
-                    ..._predictions.map(
-                      (p) => _PredictionTile(record: p, strings: strings),
+                    ..._signals.map(
+                      (s) => _SignalHistoryTile(record: s, strings: strings),
                     ),
                 ],
               ),
@@ -193,33 +160,24 @@ class _SummaryCard extends StatelessWidget {
             Text(display.tradeDate,
                 style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 4),
-            Text(
-              strings.intradaySnapshotHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
+            Text(strings.intradaySnapshotHint,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )),
             const SizedBox(height: 12),
             Text(strings.mainNetInflow),
-            Text(
-              strings.formatMoney(display.mainNetInflow),
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: colorForNetInflow(context, display.mainNetInflow),
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            Text(
-              '${strings.mainNetRatio} ${display.mainNetRatio.toStringAsFixed(2)}%',
-            ),
+            Text(strings.formatMoney(display.mainNetInflow),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: colorForNetInflow(context, display.mainNetInflow),
+                      fontWeight: FontWeight.bold,
+                    )),
+            Text('${strings.mainNetRatio} ${display.mainNetRatio.toStringAsFixed(2)}%'),
             const SizedBox(height: 12),
             Text(strings.retailNetInflow),
-            Text(
-              strings.formatMoney(display.retailNetInflow),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color:
-                        colorForNetInflow(context, display.retailNetInflow),
-                  ),
-            ),
+            Text(strings.formatMoney(display.retailNetInflow),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colorForNetInflow(context, display.retailNetInflow),
+                    )),
             if (price != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -235,81 +193,177 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _AnalysisCard extends ConsumerWidget {
-  const _AnalysisCard({
+class _SignalAnalysisCard extends ConsumerWidget {
+  const _SignalAnalysisCard({
+    required this.code,
     required this.flows,
-    required this.latestPrediction,
+    required this.latestSignal,
     required this.strings,
   });
 
+  final String code;
   final List<CapitalFlowDay> flows;
-  final PredictionRecord? latestPrediction;
+  final PositionSignalRecord? latestSignal;
   final AppStrings strings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final analysis = PredictionAnalyzer(thresholds: settings.thresholds)
-        .analyze(flows);
-    final direction = latestPrediction?.direction ?? analysis.direction;
-    final confidence = latestPrediction?.confidenceScore ?? analysis.confidence;
-    final reasons = latestPrediction?.analysisSummary != null
-        ? latestPrediction!.analysisSummary!.split('；')
-        : analysis.reasons;
+    final weeklyAsync = ref.read(eastmoneyClientProvider);
+    return FutureBuilder(
+      future: weeklyAsync.fetchWeeklyBars(code, limit: 30),
+      builder: (context, snapshot) {
+        final weekly = snapshot.data ?? [];
+        final previous = latestSignal;
+        final analysis = const PositionSignalAnalyzer().analyze(
+          dailyBars: barsFromCapitalFlowDays(flows),
+          weeklyBars: weekly,
+          previousTrendPhase: previous?.trendPhase,
+          previousSeverity: previous?.reversalSeverity,
+        );
 
-    return Card(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        final signalType = latestSignal?.signalType ?? analysis.signalType;
+        final confidence = latestSignal?.confidence ?? analysis.confidence;
+        final trendPhase = latestSignal?.trendPhase ?? analysis.trendPhase;
+        final severity = latestSignal?.reversalSeverity ?? analysis.reversalSeverity;
+        final isReversal = latestSignal?.isReversal ?? analysis.isReversal;
+        final triggered =
+            latestSignal?.triggeredSignals ?? analysis.triggeredSignals;
+        final suggestedAction =
+            latestSignal?.suggestedAction ?? analysis.suggestedAction;
+        final reasons = latestSignal?.analysisSummary != null
+            ? latestSignal!.analysisSummary.split(' · ')
+            : analysis.reasons;
+
+        return Card(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  strings.analysisSection,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const Spacer(),
-                Chip(
-                  label: Text(strings.directionLabel(direction.key)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${strings.compositeScore} ${analysis.score.toStringAsFixed(1)} · '
-              '${strings.confidence} ${(confidence * 100).toStringAsFixed(0)}%',
-            ),
-            const SizedBox(height: 8),
-            _MetricRow(
-              label: strings.priceChange6m,
-              value: '${analysis.sixMonthPriceChangePercent.toStringAsFixed(1)}%',
-            ),
-            _MetricRow(
-              label: strings.mainFlow20d,
-              value: strings.formatMoney(analysis.recent20MainFlowSum),
-            ),
-            _MetricRow(
-              label: strings.patternWinRate,
-              value: '${analysis.historicalSamePatternRate.toStringAsFixed(0)}%',
-            ),
-            const SizedBox(height: 8),
-            ...reasons.take(6).map(
-              (r) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                if (isReversal || severity != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.warning_amber,
+                                color: Theme.of(context).colorScheme.error),
+                            const SizedBox(width: 8),
+                            Text(strings.reversalBanner,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.error,
+                                      fontWeight: FontWeight.bold,
+                                    )),
+                          ],
+                        ),
+                        if (severity != null) ...[
+                          const SizedBox(height: 4),
+                          Text(strings.severityLabel(severity)),
+                        ],
+                        if (suggestedAction != null) ...[
+                          const SizedBox(height: 4),
+                          Text('${strings.suggestedAction}: $suggestedAction'),
+                        ],
+                      ],
+                    ),
+                  ),
+                Row(
                   children: [
-                    const Text('• '),
-                    Expanded(child: Text(r, style: Theme.of(context).textTheme.bodySmall)),
+                    Text(strings.analysisSection,
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    Chip(label: Text(strings.signalTypeLabel(signalType))),
                   ],
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  '${strings.trendPhase}: ${strings.trendPhaseLabel(trendPhase)} · '
+                  '${strings.confidence} ${confidence.toStringAsFixed(0)}%',
+                ),
+                const SizedBox(height: 8),
+                _MetricRow(
+                  label: strings.retracePercent,
+                  value: '${(latestSignal?.retracePercent ?? analysis.retracePercent).toStringAsFixed(1)}%',
+                ),
+                if (analysis.ma20 != null)
+                  _MetricRow(label: 'MA20', value: analysis.ma20!.toStringAsFixed(2)),
+                if (analysis.ma30 != null)
+                  _MetricRow(label: 'MA30', value: analysis.ma30!.toStringAsFixed(2)),
+                if (analysis.ma60 != null)
+                  _MetricRow(label: 'MA60', value: analysis.ma60!.toStringAsFixed(2)),
+                if (analysis.rsi != null)
+                  _MetricRow(label: 'RSI', value: analysis.rsi!.toStringAsFixed(1)),
+                if (analysis.adx != null)
+                  _MetricRow(label: 'ADX', value: analysis.adx!.toStringAsFixed(1)),
+                if (analysis.macdDif != null)
+                  _MetricRow(
+                    label: 'MACD',
+                    value:
+                        '${analysis.macdDif!.toStringAsFixed(2)}/${analysis.macdDea?.toStringAsFixed(2) ?? '-'}',
+                  ),
+                if (analysis.volumeRatio != null)
+                  _MetricRow(
+                    label: strings.volumeRatio,
+                    value: analysis.volumeRatio!.toStringAsFixed(2),
+                  ),
+                if (analysis.atrStopLoss != null)
+                  _MetricRow(
+                    label: strings.atrStopLoss,
+                    value: analysis.atrStopLoss!.toStringAsFixed(2),
+                  ),
+                if (triggered.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(strings.resonanceSignals,
+                      style: Theme.of(context).textTheme.labelLarge),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: triggered
+                        .map((id) => Chip(
+                              label: Text(strings.triggeredSignalLabel(id),
+                                  style: const TextStyle(fontSize: 11)),
+                              visualDensity: VisualDensity.compact,
+                            ))
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                ...reasons.take(8).map(
+                      (r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('• '),
+                            Expanded(
+                                child: Text(r,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall)),
+                          ],
+                        ),
+                      ),
+                    ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -335,46 +389,32 @@ class _MetricRow extends StatelessWidget {
   }
 }
 
-class _PredictionTile extends StatelessWidget {
-  const _PredictionTile({required this.record, required this.strings});
+class _SignalHistoryTile extends StatelessWidget {
+  const _SignalHistoryTile({required this.record, required this.strings});
 
-  final PredictionRecord record;
+  final PositionSignalRecord record;
   final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    IconData icon;
-    Color color;
-    String status;
-    if (!record.isVerified) {
-      icon = Icons.schedule;
-      color = Theme.of(context).colorScheme.outline;
-      status = strings.pending;
-    } else if (record.direction == PredictionDirection.neutral) {
-      icon = Icons.remove_circle_outline;
-      color = Theme.of(context).colorScheme.outline;
-      status = strings.predictNeutral;
-    } else if (record.isHit) {
-      icon = Icons.check_circle;
-      color = Colors.green;
-      status = strings.hit;
-    } else {
-      icon = Icons.cancel;
-      color = Theme.of(context).colorScheme.error;
-      status = strings.miss;
-    }
-
+    final isReversal = record.isReversal || record.reversalSeverity != null;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      color: isReversal
+          ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35)
+          : null,
       child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text('${record.tradeDate} · ${strings.directionLabel(record.direction.key)}'),
+        leading: Icon(
+          isReversal ? Icons.warning_amber : Icons.insights_outlined,
+          color: isReversal ? Theme.of(context).colorScheme.error : null,
+        ),
+        title: Text(
+          '${record.tradeDate} · ${strings.signalTypeLabel(record.signalType)}',
+        ),
         subtitle: Text(
-          record.analysisSummary?.isNotEmpty == true
-              ? record.analysisSummary!
-              : record.isVerified && record.actualChangePercent != null
-                  ? '$status · ${record.actualChangePercent!.toStringAsFixed(2)}%'
-                  : '${strings.mainNetRatio} ${record.mainNetRatio.toStringAsFixed(2)}%',
+          record.suggestedAction?.isNotEmpty == true
+              ? record.suggestedAction!
+              : record.analysisSummary,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
         ),

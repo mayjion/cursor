@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/capital_flow_day.dart';
 import '../models/capital_flow_point.dart';
+import '../models/stock_bar.dart';
 
 class EastmoneyException implements Exception {
   EastmoneyException(this.message);
@@ -16,8 +17,7 @@ class EastmoneyException implements Exception {
 /// 东方财富资金流向 API 客户端。
 class EastmoneyClient {
   EastmoneyClient({http.Client? client})
-      : _client = client ??
-            http.Client();
+      : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -45,7 +45,6 @@ class EastmoneyClient {
     return market == 'sh' ? '1.$code' : '0.$code';
   }
 
-  /// 拉取股票名称与当日实时资金流。
   Future<({String name, CapitalFlowDay? todayFlow})> fetchStockQuote(
     String code,
   ) async {
@@ -69,7 +68,6 @@ class EastmoneyClient {
     return (name: name, todayFlow: today);
   }
 
-  /// 当日资金流 + 行情：主力/散户取自分时最后一笔（与当日曲线一致），占比/现价取自行情。
   Future<CapitalFlowDay?> fetchTodayCapitalFlow(String code) async {
     final quote = await fetchStockQuote(code);
     final meta = quote.todayFlow;
@@ -88,9 +86,6 @@ class EastmoneyClient {
       mainNetInflow: last?.mainNetInflow ?? 0,
       smallNetInflow: last?.retailNetInflow ?? 0,
       mainNetRatio: meta?.mainNetRatio ?? 0,
-      superNetInflow: 0,
-      bigNetInflow: 0,
-      midNetInflow: 0,
       closePrice: meta?.closePrice,
       changePercent: meta?.changePercent,
     );
@@ -112,7 +107,6 @@ class EastmoneyClient {
     );
   }
 
-  /// 当日分时资金流（分钟级，主力/散户为当日累计净流入）。
   Future<List<CapitalFlowPoint>> fetchIntradayFlow(String code) async {
     final secid = secidFromCode(code);
     final uri = Uri.parse(
@@ -149,21 +143,35 @@ class EastmoneyClient {
     return list;
   }
 
-  /// 近6个月（约126个交易日）日资金流，含收盘价与涨跌幅（优先资金流接口，少打 K 线）。
+  /// 日 K OHLCV。
+  Future<List<StockBar>> fetchDailyBars(String code, {int limit = 126}) async {
+    final map = await _fetchKlineDetail(code, limit: limit, klt: '101');
+    final list = map.values.toList()
+      ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
+    return list;
+  }
+
+  /// 周 K OHLCV。
+  Future<List<StockBar>> fetchWeeklyBars(String code, {int limit = 30}) async {
+    final map = await _fetchKlineDetail(code, limit: limit, klt: '102');
+    final list = map.values.toList()
+      ..sort((a, b) => a.tradeDate.compareTo(b.tradeDate));
+    return list;
+  }
+
+  /// 近6个月日资金流 + OHLCV。
   Future<List<CapitalFlowDay>> fetchSixMonthHistory(String code) async {
     const limit = 126;
     final flows = await fetchFlowHistory(code, limit: limit);
     if (flows.isEmpty) return [];
 
-    final needsKline = flows.any((d) => d.changePercent == null);
-    if (!needsKline) return flows;
-
     try {
-      final klines = await _fetchKlineDetail(code, limit: limit);
+      final klines = await _fetchKlineDetail(code, limit: limit, klt: '101');
       if (klines.isEmpty) return flows;
       return flows
-          .map(
-            (flow) => CapitalFlowDay(
+          .map((flow) {
+            final k = klines[flow.tradeDate];
+            return CapitalFlowDay(
               code: flow.code,
               tradeDate: flow.tradeDate,
               mainNetInflow: flow.mainNetInflow,
@@ -172,18 +180,20 @@ class EastmoneyClient {
               bigNetInflow: flow.bigNetInflow,
               midNetInflow: flow.midNetInflow,
               smallNetInflow: flow.smallNetInflow,
-              closePrice: klines[flow.tradeDate]?.close ?? flow.closePrice,
-              changePercent:
-                  flow.changePercent ?? klines[flow.tradeDate]?.changePercent,
-            ),
-          )
+              closePrice: k?.close ?? flow.closePrice,
+              changePercent: flow.changePercent ?? k?.changePercent,
+              open: k?.open,
+              high: k?.high,
+              low: k?.low,
+              volume: k?.volume,
+            );
+          })
           .toList();
     } catch (_) {
       return flows;
     }
   }
 
-  /// 历史日资金流（近 N 条），含收盘价、涨跌幅（fields2 扩展字段）。
   Future<List<CapitalFlowDay>> fetchFlowHistory(
     String code, {
     int limit = 30,
@@ -227,7 +237,6 @@ class EastmoneyClient {
     return list.reversed.toList();
   }
 
-  /// 指定交易日涨跌幅（%）；优先本地缓存逻辑，尽量不请求 K 线。
   Future<double?> fetchChangePercentOnDate(String code, String date) async {
     final history = await fetchFlowHistory(code, limit: 60);
     for (final day in history) {
@@ -236,8 +245,8 @@ class EastmoneyClient {
       }
     }
     try {
-      final klines = await _fetchKlineChanges(code, limit: 60);
-      return klines[date];
+      final klines = await _fetchKlineDetail(code, limit: 60);
+      return klines[date]?.changePercent;
     } catch (_) {
       return null;
     }
@@ -261,21 +270,10 @@ class EastmoneyClient {
     }
   }
 
-  Future<Map<String, double>> _fetchKlineChanges(
-    String code, {
-    int limit = 60,
-  }) async {
-    final detail = await _fetchKlineDetail(code, limit: limit);
-    return {
-      for (final e in detail.entries)
-        if (e.value.changePercent != null)
-          e.key: e.value.changePercent!,
-    };
-  }
-
-  Future<Map<String, _KlineDay>> _fetchKlineDetail(
+  Future<Map<String, StockBar>> _fetchKlineDetail(
     String code, {
     int limit = 126,
+    String klt = '101',
   }) async {
     final secid = secidFromCode(code);
     final uri = Uri.parse(
@@ -285,7 +283,7 @@ class EastmoneyClient {
         'secid': secid,
         'fields1': 'f1,f2,f3,f4,f5,f6',
         'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        'klt': '101',
+        'klt': klt,
         'fqt': '1',
         'lmt': limit.toString(),
         'ut': 'b2884a393a59ad64002292a3e90d46a5',
@@ -295,14 +293,20 @@ class EastmoneyClient {
     final data = resp['data'] as Map<String, dynamic>?;
     if (data == null) return {};
     final klines = data['klines'] as List<dynamic>? ?? [];
-    final map = <String, _KlineDay>{};
+    final map = <String, StockBar>{};
     for (final line in klines) {
       if (line is! String) continue;
       final parts = line.split(',');
       if (parts.length < 9) continue;
       final date = parts[0];
-      map[date] = _KlineDay(
+      map[date] = StockBar.fromKline(
+        code: code,
+        tradeDate: date,
+        open: double.tryParse(parts[1]),
         close: double.tryParse(parts[2]),
+        high: double.tryParse(parts[3]),
+        low: double.tryParse(parts[4]),
+        volume: double.tryParse(parts[5]),
         changePercent: double.tryParse(parts[8]),
       );
     }
@@ -375,10 +379,4 @@ class EastmoneyClient {
   }
 
   void close() => _client.close();
-}
-
-class _KlineDay {
-  const _KlineDay({this.close, this.changePercent});
-  final double? close;
-  final double? changePercent;
 }

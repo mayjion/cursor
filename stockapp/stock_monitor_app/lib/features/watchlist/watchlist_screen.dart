@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models/prediction_direction.dart';
+import '../../core/models/position_signal.dart';
+import '../../core/models/position_signal_record.dart';
 import '../../core/models/watch_stock.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
@@ -26,9 +27,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
       await refreshAllWatchlist(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ref.read(appStringsProvider).refreshDone),
-          ),
+          SnackBar(content: Text(ref.read(appStringsProvider).refreshDone)),
         );
       }
     } catch (e) {
@@ -59,15 +58,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
     }
   }
 
-  List<WatchStock> _sortedByPrediction(
+  List<WatchStock> _sortedBySignal(
     List<WatchStock> stocks,
     Map<String, WatchlistItemState> items,
   ) {
     final sorted = List<WatchStock>.from(stocks);
     sorted.sort((a, b) {
-      final dirA = items[a.code]?.latestPrediction?.direction;
-      final dirB = items[b.code]?.latestPrediction?.direction;
-      final cmp = _predictionSortOrder(dirA).compareTo(_predictionSortOrder(dirB));
+      final sigA = items[a.code]?.latestSignal;
+      final sigB = items[b.code]?.latestSignal;
+      final cmp = _signalSortOrder(sigA).compareTo(_signalSortOrder(sigB));
       if (cmp != 0) return cmp;
       return a.code.compareTo(b.code);
     });
@@ -106,12 +105,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
         error: (e, _) => Center(child: Text('$e')),
         data: (stocks) {
           if (stocks.isEmpty) {
-            return _EmptyState(
-              strings: strings,
-              onAdd: _openAddSheet,
-            );
+            return _EmptyState(strings: strings, onAdd: _openAddSheet);
           }
-          final sorted = _sortedByPrediction(stocks, itemsMap);
+          final sorted = _sortedBySignal(stocks, itemsMap);
           return RefreshIndicator(
             onRefresh: _onRefresh,
             child: GridView.builder(
@@ -121,7 +117,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 10,
                 crossAxisSpacing: 10,
-                childAspectRatio: 0.86,
+                childAspectRatio: 0.78,
               ),
               itemCount: sorted.length,
               itemBuilder: (context, index) {
@@ -150,13 +146,19 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
   }
 }
 
-/// 看涨 → 观望 → 无推测 → 看跌
-int _predictionSortOrder(PredictionDirection? direction) {
-  return switch (direction) {
-    PredictionDirection.up => 0,
-    PredictionDirection.neutral => 1,
-    null => 2,
-    PredictionDirection.down => 3,
+int _signalSortOrder(PositionSignalRecord? signal) {
+  if (signal == null) return 99;
+  final severity = signal.reversalSeverity;
+  if (severity == ReversalSeverity.deepDrop) return 0;
+  if (severity == ReversalSeverity.confirmed) return 1;
+  final type = signal.signalType;
+  return switch (type) {
+    PositionSignalType.trendReversal => 2,
+    PositionSignalType.trendBreak => 3,
+    PositionSignalType.reduce => 4,
+    PositionSignalType.add => 5,
+    PositionSignalType.hold => 6,
+    PositionSignalType.holdBaseOnly => 7,
   };
 }
 
@@ -180,18 +182,14 @@ class _EmptyState extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 24),
-            Text(
-              strings.emptyWatchlist,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text(strings.emptyWatchlist,
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
-            Text(
-              strings.emptyWatchlistHint,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
+            Text(strings.emptyWatchlistHint,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: onAdd,

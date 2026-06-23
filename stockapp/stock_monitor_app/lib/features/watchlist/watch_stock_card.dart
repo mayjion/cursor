@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/models/prediction_direction.dart';
+import '../../core/models/position_signal.dart';
+import '../../core/models/position_signal_record.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/settings/app_theme.dart';
@@ -29,19 +30,27 @@ class WatchStockCard extends ConsumerWidget {
       orElse: () => null,
     );
     final flow = state?.todayFlow;
-    final pred = state?.latestPrediction;
+    final signal = state?.latestSignal;
+    final isReversal = signal?.isReversal == true ||
+        signal?.reversalSeverity != null;
 
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
+      shape: isReversal
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.7),
+                width: 2,
+              ),
+            )
+          : null,
       child: InkWell(
         onTap: onTap,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Padding(
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 6, 10),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -55,28 +64,19 @@ class WatchStockCard extends ConsumerWidget {
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         Text(
                           code,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurfaceVariant,
                               ),
                         ),
-                        if (flow?.closePrice != null) ...[
-                          const SizedBox(height: 4),
-                          _PriceLine(
-                            price: flow!.closePrice!,
-                            changePercent: flow.changePercent,
-                            strings: strings,
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -92,48 +92,26 @@ class WatchStockCard extends ConsumerWidget {
                         color: Theme.of(context).colorScheme.outline,
                       ),
                       onPressed: onDelete,
-                      tooltip:
-                          Localizations.localeOf(context).languageCode == 'zh'
-                              ? '移除'
-                              : 'Remove',
+                      tooltip: strings.isZh ? '移除' : 'Remove',
                     ),
                   ),
                 ],
               ),
-              if (pred != null) ...[
+              if (flow?.closePrice != null) ...[
                 const SizedBox(height: 4),
-                _PredictionChip(direction: pred.direction),
-              ],
-              if (flow != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _FlowMetric(
-                        label: strings.mainNetInflow,
-                        value: strings.formatMoney(flow.mainNetInflow),
-                        valueColor:
-                            colorForNetInflow(context, flow.mainNetInflow),
-                        subLabel:
-                            '${strings.mainNetRatio} ${flow.mainNetRatio.toStringAsFixed(2)}%',
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _FlowMetric(
-                        label: strings.retailNetInflow,
-                        value: strings.formatMoney(flow.smallNetInflow),
-                        valueColor:
-                            colorForNetInflow(context, flow.smallNetInflow),
-                      ),
-                    ),
-                  ],
+                _PriceLine(
+                  price: flow!.closePrice!,
+                  changePercent: flow.changePercent,
                 ),
               ],
+              const SizedBox(height: 6),
+              Expanded(
+                child: signal != null
+                    ? _StrategySignalPanel(record: signal, strings: strings)
+                    : _NoSignalPanel(strings: strings),
+              ),
             ],
           ),
-        ),
         ),
       ),
     );
@@ -141,27 +119,16 @@ class WatchStockCard extends ConsumerWidget {
 }
 
 class _PriceLine extends StatelessWidget {
-  const _PriceLine({
-    required this.price,
-    required this.changePercent,
-    required this.strings,
-  });
+  const _PriceLine({required this.price, required this.changePercent});
 
   final double price;
   final double? changePercent;
-  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
     final change = changePercent;
     return Row(
       children: [
-        Text(
-          '${strings.latestPrice} ',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-        ),
         Text(
           price.toStringAsFixed(2),
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -183,90 +150,198 @@ class _PriceLine extends StatelessWidget {
   }
 }
 
-class _FlowMetric extends StatelessWidget {
-  const _FlowMetric({
-    required this.label,
-    required this.value,
-    required this.valueColor,
-    this.subLabel,
-  });
+class _NoSignalPanel extends StatelessWidget {
+  const _NoSignalPanel({required this.strings});
 
-  final String label;
-  final String value;
-  final Color valueColor;
-  final String? subLabel;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: valueColor,
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-        if (subLabel != null)
-          Text(subLabel!, style: Theme.of(context).textTheme.labelSmall),
-      ],
+    return Center(
+      child: Text(
+        strings.isZh ? '下拉刷新获取信号' : 'Pull to refresh for signal',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
     );
   }
 }
 
-class _PredictionChip extends ConsumerWidget {
-  const _PredictionChip({required this.direction});
+class _StrategySignalPanel extends StatelessWidget {
+  const _StrategySignalPanel({required this.record, required this.strings});
 
-  final PredictionDirection direction;
+  final PositionSignalRecord record;
+  final AppStrings strings;
+
+  List<String> get _displayReasons {
+    if (record.reasons.isNotEmpty) return record.reasons;
+    if (record.triggeredSignals.isNotEmpty) {
+      return record.triggeredSignals
+          .map(strings.triggeredSignalLabel)
+          .toList();
+    }
+    if (record.analysisSummary.isNotEmpty) {
+      return record.analysisSummary
+          .split(RegExp(r'[·；]'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final strings = ref.watch(appStringsProvider);
-    final (label, color, icon) = switch (direction) {
-      PredictionDirection.up => (
-          strings.predictUp,
-          stockUpColor(context),
-          Icons.trending_up,
-        ),
-      PredictionDirection.down => (
-          strings.predictDown,
-          stockDownColor(context),
-          Icons.trending_down,
-        ),
-      PredictionDirection.neutral => (
-          strings.predictNeutral,
-          Theme.of(context).colorScheme.outline,
-          Icons.remove,
-        ),
-    };
+  Widget build(BuildContext context) {
+    final type = record.signalType;
+    final severity = record.reversalSeverity;
+    final (label, color, icon) = _signalStyle(context, type, severity);
+    final reasons = _displayReasons;
+    final action = record.suggestedAction;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+            ],
           ),
+          if (reasons.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              strings.triggerConditions,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            ...reasons.take(3).map(
+                  (r) => Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('· ',
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              height: 1.25,
+                            )),
+                        Expanded(
+                          child: Text(
+                            r,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(fontSize: 10, height: 1.25),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+          if (action != null && action.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${strings.executeAction}：$action',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  (String, Color, IconData) _signalStyle(
+    BuildContext context,
+    PositionSignalType type,
+    ReversalSeverity? severity,
+  ) {
+    if (severity == ReversalSeverity.deepDrop) {
+      return (
+        strings.severityLabel(severity!),
+        Theme.of(context).colorScheme.error,
+        Icons.error,
+      );
+    }
+    if (severity == ReversalSeverity.confirmed) {
+      return (
+        strings.signalTrendReversal,
+        Theme.of(context).colorScheme.error,
+        Icons.warning_amber,
+      );
+    }
+    if (severity == ReversalSeverity.earlyWarning) {
+      return (
+        strings.signalTrendBreak,
+        Colors.deepOrange,
+        Icons.trending_down,
+      );
+    }
+    return switch (type) {
+      PositionSignalType.add => (
+          strings.signalAdd,
+          stockUpColor(context),
+          Icons.add_circle_outline,
+        ),
+      PositionSignalType.reduce => (
+          strings.signalReduce,
+          Colors.orange.shade700,
+          Icons.remove_circle_outline,
+        ),
+      PositionSignalType.trendBreak => (
+          strings.signalTrendBreak,
+          Colors.deepOrange,
+          Icons.trending_down,
+        ),
+      PositionSignalType.trendReversal => (
+          strings.signalTrendReversal,
+          Theme.of(context).colorScheme.error,
+          Icons.warning_amber,
+        ),
+      PositionSignalType.hold => (
+          strings.signalHold,
+          Theme.of(context).colorScheme.outline,
+          Icons.pause_circle_outline,
+        ),
+      PositionSignalType.holdBaseOnly => (
+          strings.signalHoldBaseOnly,
+          Theme.of(context).colorScheme.primary,
+          Icons.shield_outlined,
+        ),
+    };
   }
 }

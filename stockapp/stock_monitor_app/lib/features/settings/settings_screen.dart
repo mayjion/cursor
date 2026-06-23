@@ -35,9 +35,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const Divider(),
-          ListTile(
-            title: Text(strings.languageSection),
-          ),
+          ListTile(title: Text(strings.languageSection)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SegmentedButton<String>(
@@ -50,61 +48,41 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const Divider(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              strings.thresholdSection,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          ),
-          _ThresholdSlider(
-            label: strings.bullRatio,
-            value: settings.thresholds.bullRatioPercent,
-            min: 0,
-            max: 10,
-            onChanged: (v) => notifier.setThresholds(
-              settings.thresholds.copyWith(bullRatioPercent: v),
-            ),
-          ),
-          _ThresholdSlider(
-            label: strings.bearRatio,
-            value: settings.thresholds.bearRatioPercent,
-            min: -10,
-            max: 0,
-            onChanged: (v) => notifier.setThresholds(
-              settings.thresholds.copyWith(bearRatioPercent: v),
-            ),
-          ),
-          const Divider(),
           SwitchListTile(
             title: Text(strings.notifySection),
             subtitle: Text(strings.notifySubtitle),
             value: settings.notifyEnabled,
             onChanged: (v) async {
               await notifier.setNotifyEnabled(v);
-              await NotificationService.instance.scheduleCloseReminder(enabled: v);
+              await NotificationService.instance
+                  .scheduleCloseReminder(enabled: v);
             },
+          ),
+          SwitchListTile(
+            title: Text(strings.reversalNotifySection),
+            subtitle: Text(strings.reversalNotifySubtitle),
+            value: settings.reversalNotifyEnabled,
+            onChanged: notifier.setReversalNotifyEnabled,
           ),
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Card(
-              color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .errorContainer
+                  .withValues(alpha: 0.3),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    Icon(Icons.info_outline,
+                        color: Theme.of(context).colorScheme.error),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        strings.disclaimer,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      child: Text(strings.disclaimer,
+                          style: Theme.of(context).textTheme.bodyMedium),
                     ),
                   ],
                 ),
@@ -122,40 +100,5 @@ class SettingsScreen extends ConsumerWidget {
       2 => s.themeOrange,
       _ => s.themeIndigo,
     };
-  }
-}
-
-class _ThresholdSlider extends StatelessWidget {
-  const _ThresholdSlider({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ListTile(
-          title: Text(label),
-          trailing: Text('${value.toStringAsFixed(1)}%'),
-        ),
-        Slider(
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          divisions: ((max - min) * 2).toInt(),
-          onChanged: onChanged,
-        ),
-      ],
-    );
   }
 }

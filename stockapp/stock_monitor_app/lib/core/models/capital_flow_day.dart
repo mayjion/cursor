@@ -10,6 +10,10 @@ class CapitalFlowDay {
     this.smallNetInflow = 0,
     this.closePrice,
     this.changePercent,
+    this.open,
+    this.high,
+    this.low,
+    this.volume,
   });
 
   final String code;
@@ -22,6 +26,10 @@ class CapitalFlowDay {
   final double smallNetInflow;
   final double? closePrice;
   final double? changePercent;
+  final double? open;
+  final double? high;
+  final double? low;
+  final double? volume;
 
   String storageKey() => '$code|$tradeDate';
 
@@ -36,6 +44,10 @@ class CapitalFlowDay {
         'smallNetInflow': smallNetInflow,
         'closePrice': closePrice,
         'changePercent': changePercent,
+        'open': open,
+        'high': high,
+        'low': low,
+        'volume': volume,
       };
 
   CapitalFlowDay copyWith({
@@ -44,6 +56,10 @@ class CapitalFlowDay {
     double? smallNetInflow,
     double? closePrice,
     double? changePercent,
+    double? open,
+    double? high,
+    double? low,
+    double? volume,
   }) {
     return CapitalFlowDay(
       code: code,
@@ -56,6 +72,10 @@ class CapitalFlowDay {
       smallNetInflow: smallNetInflow ?? this.smallNetInflow,
       closePrice: closePrice ?? this.closePrice,
       changePercent: changePercent ?? this.changePercent,
+      open: open ?? this.open,
+      high: high ?? this.high,
+      low: low ?? this.low,
+      volume: volume ?? this.volume,
     );
   }
 
@@ -71,6 +91,10 @@ class CapitalFlowDay {
       smallNetInflow: (json['smallNetInflow'] as num?)?.toDouble() ?? 0,
       closePrice: (json['closePrice'] as num?)?.toDouble(),
       changePercent: (json['changePercent'] as num?)?.toDouble(),
+      open: (json['open'] as num?)?.toDouble(),
+      high: (json['high'] as num?)?.toDouble(),
+      low: (json['low'] as num?)?.toDouble(),
+      volume: (json['volume'] as num?)?.toDouble(),
     );
   }
 }

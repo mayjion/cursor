@@ -1,5 +1,5 @@
 name: stock_monitor_app
-description: "自选股资金流向监控与次日涨跌推测"
+description: "自选股30日加减仓信号与趋势逆转提醒"
 publish_to: 'none'
 version: 1.0.0+1
 

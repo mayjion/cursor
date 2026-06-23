@@ -2,9 +2,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/models/prediction_direction.dart';
-import '../../core/models/prediction_record.dart';
-import '../../core/prediction/prediction_engine.dart';
+import '../../core/models/position_signal.dart';
+import '../../core/models/position_signal_record.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 
@@ -14,127 +13,129 @@ class StatsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(appStringsProvider);
-    final statsAsync = ref.watch(predictionStatsProvider);
-    final predsAsync = ref.watch(predictionListProvider);
+    final summaryAsync = ref.watch(positionSignalSummaryProvider);
+    final signalsAsync = ref.watch(positionSignalListProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.statsTitle)),
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(predictionEngineProvider).verifyPendingRecords();
-          ref.invalidate(predictionStatsProvider);
-          ref.invalidate(predictionListProvider);
+          ref.invalidate(positionSignalSummaryProvider);
+          ref.invalidate(positionSignalListProvider);
         },
-        child: statsAsync.when(
+        child: summaryAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             children: [Center(child: Text('$e'))],
           ),
-          data: (stats) {
+          data: (summary) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
-                _AccuracyHero(
-                  accuracy: stats.accuracyPercent,
-                  hits: stats.hits,
-                  scored: stats.scoredPredictions,
-                  strings: strings,
+                Card(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Text(strings.totalSignals,
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Text('${summary.totalSignals}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .displayMedium
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
                       child: _StatChip(
-                        label: strings.totalPredictions,
-                        value: '${stats.totalPredictions}',
+                        label: strings.reversalCount,
+                        value: '${summary.reversalCount}',
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _StatChip(
-                        label: strings.hits,
-                        value: '${stats.hits}',
+                        label: strings.recentChanges,
+                        value: '${summary.recentChanges}',
                       ),
                     ),
                   ],
                 ),
-                if (stats.scoredPredictions > 0) ...[
+                if (summary.byType.isNotEmpty) ...[
                   const SizedBox(height: 24),
-                  Text(
-                    strings.perStock,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text(strings.signalDistribution,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   SizedBox(
                     height: 200,
-                    child: _PerStockChart(byCode: stats.byCode),
+                    child: _SignalDistributionChart(
+                      byType: summary.byType,
+                      strings: strings,
+                    ),
                   ),
-                  ...stats.byCode.entries.map((e) {
-                    return ListTile(
-                      title: Text(e.key),
-                      trailing: Text(
-                        '${e.value.accuracyPercent.toStringAsFixed(1)}% '
-                        '(${e.value.hits}/${e.value.scored})',
-                      ),
-                    );
-                  }),
                 ],
                 const SizedBox(height: 24),
-                predsAsync.when(
+                Text(strings.perStock,
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                signalsAsync.when(
+                  loading: () => const CircularProgressIndicator(),
+                  error: (_, _) => const SizedBox.shrink(),
+                  data: (signals) {
+                    final latestByCode = <String, PositionSignalRecord>{};
+                    for (final s in signals) {
+                      latestByCode.putIfAbsent(s.code, () => s);
+                    }
+                    if (latestByCode.isEmpty) {
+                      return Text(strings.chartNotEnough);
+                    }
+                    return Column(
+                      children: latestByCode.values.map((s) {
+                        final isReversal =
+                            s.isReversal || s.reversalSeverity != null;
+                        return Card(
+                          color: isReversal
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .errorContainer
+                                  .withValues(alpha: 0.3)
+                              : null,
+                          child: ListTile(
+                            title: Text(s.code),
+                            subtitle: Text(
+                              strings.signalTypeLabel(s.signalType),
+                            ),
+                            trailing: Text(
+                              s.suggestedAction ?? s.tradeDate,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                signalsAsync.when(
                   loading: () => const SizedBox.shrink(),
                   error: (_, _) => const SizedBox.shrink(),
-                  data: (preds) => _CalendarSection(
-                    records: preds.take(60).toList(),
+                  data: (signals) => _SignalTimeline(
+                    records: signals.take(60).toList(),
                     strings: strings,
                   ),
                 ),
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _AccuracyHero extends StatelessWidget {
-  const _AccuracyHero({
-    required this.accuracy,
-    required this.hits,
-    required this.scored,
-    required this.strings,
-  });
-
-  final double accuracy;
-  final int hits;
-  final int scored;
-  final AppStrings strings;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Text(strings.accuracy, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              scored == 0 ? '—' : '${accuracy.toStringAsFixed(1)}%',
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-            ),
-            if (scored > 0)
-              Text(
-                '$hits / $scored',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-          ],
         ),
       ),
     );
@@ -164,31 +165,38 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-class _PerStockChart extends StatelessWidget {
-  const _PerStockChart({required this.byCode});
+class _SignalDistributionChart extends StatelessWidget {
+  const _SignalDistributionChart({
+    required this.byType,
+    required this.strings,
+  });
 
-  final Map<String, CodeStats> byCode;
+  final Map<PositionSignalType, int> byType;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    if (byCode.isEmpty) {
-      return const Center(child: Text('—'));
-    }
-    final entries = byCode.entries.toList();
+    final entries = byType.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (entries.isEmpty) return const Center(child: Text('—'));
+
+    final maxY = entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: 100,
+        maxY: maxY.toDouble() * 1.2,
         barGroups: [
           for (var i = 0; i < entries.length; i++)
             BarChartGroupData(
               x: i,
               barRods: [
                 BarChartRodData(
-                  toY: entries[i].value.accuracyPercent.clamp(0, 100),
-                  color: Theme.of(context).colorScheme.primary,
+                  toY: entries[i].value.toDouble(),
+                  color: _colorForType(context, entries[i].key),
                   width: 16,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(4)),
                 ),
               ],
             ),
@@ -200,12 +208,10 @@ class _PerStockChart extends StatelessWidget {
               getTitlesWidget: (v, _) {
                 final i = v.toInt();
                 if (i < 0 || i >= entries.length) return const SizedBox.shrink();
+                final label = strings.signalTypeLabel(entries[i].key);
                 return Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    entries[i].key,
-                    style: const TextStyle(fontSize: 10),
-                  ),
+                  child: Text(label, style: const TextStyle(fontSize: 9)),
                 );
               },
             ),
@@ -213,24 +219,36 @@ class _PerStockChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 32,
-              getTitlesWidget: (v, _) => Text('${v.toInt()}%'),
+              reservedSize: 28,
+              getTitlesWidget: (v, _) => Text(v.toInt().toString()),
             ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         gridData: const FlGridData(show: false),
         borderData: FlBorderData(show: false),
       ),
     );
   }
+
+  Color _colorForType(BuildContext context, PositionSignalType type) {
+    return switch (type) {
+      PositionSignalType.add => Colors.green,
+      PositionSignalType.reduce => Colors.orange,
+      PositionSignalType.trendBreak => Colors.deepOrange,
+      PositionSignalType.trendReversal => Theme.of(context).colorScheme.error,
+      PositionSignalType.hold => Colors.grey,
+      PositionSignalType.holdBaseOnly => Theme.of(context).colorScheme.primary,
+    };
+  }
 }
 
-class _CalendarSection extends StatelessWidget {
-  const _CalendarSection({required this.records, required this.strings});
+class _SignalTimeline extends StatelessWidget {
+  const _SignalTimeline({required this.records, required this.strings});
 
-  final List<PredictionRecord> records;
+  final List<PositionSignalRecord> records;
   final AppStrings strings;
 
   @override
@@ -238,38 +256,29 @@ class _CalendarSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          strings.predictionHistory,
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text(strings.signalHistory,
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         ...records.map((r) {
-          Color bg;
-          if (!r.isVerified) {
-            bg = Theme.of(context).colorScheme.surfaceContainerHighest;
-          } else if (r.isHit) {
-            bg = Colors.green.withValues(alpha: 0.15);
-          } else if (r.direction == PredictionDirection.neutral) {
-            bg = Theme.of(context).colorScheme.surfaceContainerHigh;
-          } else {
-            bg = Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.4);
-          }
+          final isReversal = r.isReversal || r.reversalSeverity != null;
           return Container(
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
-              color: bg,
+              color: isReversal
+                  ? Theme.of(context)
+                      .colorScheme
+                      .errorContainer
+                      .withValues(alpha: 0.4)
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
             child: ListTile(
               dense: true,
               title: Text('${r.code} · ${r.tradeDate}'),
-              subtitle: Text(strings.directionLabel(r.direction.key)),
+              subtitle: Text(strings.signalTypeLabel(r.signalType)),
               trailing: Text(
-                !r.isVerified
-                    ? strings.pending
-                    : r.actualChangePercent != null
-                        ? '${r.actualChangePercent!.toStringAsFixed(2)}%'
-                        : strings.verifyUnavailable,
+                r.suggestedAction ?? '',
+                style: Theme.of(context).textTheme.labelSmall,
               ),
             ),
           );

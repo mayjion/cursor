@@ -2,13 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/eastmoney_client.dart';
 import '../models/capital_flow_day.dart';
-import '../models/prediction_record.dart';
-import '../models/watch_stock.dart';
-import '../prediction/prediction_engine.dart';
-import '../settings/app_settings.dart';
+import '../models/position_signal_record.dart';
+import '../position/position_signal_engine.dart';
 import '../storage/flow_cache_storage.dart';
-import '../storage/prediction_storage.dart';
+import '../storage/position_signal_storage.dart';
+import '../settings/app_settings.dart';
 import '../storage/watchlist_storage.dart';
+import '../models/watch_stock.dart';
 
 final eastmoneyClientProvider = Provider<EastmoneyClient>((ref) {
   final client = EastmoneyClient();
@@ -16,11 +16,9 @@ final eastmoneyClientProvider = Provider<EastmoneyClient>((ref) {
   return client;
 });
 
-final predictionEngineProvider = Provider<PredictionEngine>((ref) {
-  final settings = ref.watch(appSettingsProvider);
-  return PredictionEngine(
+final positionSignalEngineProvider = Provider<PositionSignalEngine>((ref) {
+  return PositionSignalEngine(
     client: ref.watch(eastmoneyClientProvider),
-    thresholds: settings.thresholds,
   );
 });
 
@@ -28,28 +26,27 @@ final watchlistProvider = FutureProvider<List<WatchStock>>((ref) async {
   return WatchlistStorage.list();
 });
 
-final predictionListProvider =
-    FutureProvider<List<PredictionRecord>>((ref) async {
-  await ref.read(predictionEngineProvider).verifyPendingRecords();
-  return PredictionStorage.list();
+final positionSignalListProvider =
+    FutureProvider<List<PositionSignalRecord>>((ref) async {
+  return PositionSignalStorage.list();
 });
 
-final predictionStatsProvider = FutureProvider<PredictionStats>((ref) async {
-  final engine = ref.read(predictionEngineProvider);
-  await engine.verifyPendingRecords();
-  return engine.computeStats();
+final positionSignalSummaryProvider =
+    FutureProvider<PositionSignalSummary>((ref) async {
+  final engine = ref.read(positionSignalEngineProvider);
+  return engine.computeSummary();
 });
 
 class WatchlistItemState {
   const WatchlistItemState({
     this.todayFlow,
-    this.latestPrediction,
+    this.latestSignal,
     this.loading = false,
     this.error,
   });
 
   final CapitalFlowDay? todayFlow;
-  final PredictionRecord? latestPrediction;
+  final PositionSignalRecord? latestSignal;
   final bool loading;
   final String? error;
 }
@@ -80,10 +77,10 @@ final watchlistItemsProvider =
         }
       } catch (_) {}
     }
-    final preds = await PredictionStorage.listForCode(s.code);
+    final signals = await PositionSignalStorage.listForCode(s.code);
     map[s.code] = WatchlistItemState(
       todayFlow: today,
-      latestPrediction: preds.isNotEmpty ? preds.first : null,
+      latestSignal: signals.isNotEmpty ? signals.first : null,
     );
   }
   return map;
@@ -91,14 +88,16 @@ final watchlistItemsProvider =
 
 Future<void> refreshAllWatchlist(WidgetRef ref) async {
   final stocks = await WatchlistStorage.list();
-  final engine = ref.read(predictionEngineProvider);
-
-  await engine.verifyPendingRecords();
+  final engine = ref.read(positionSignalEngineProvider);
+  final settings = ref.read(appSettingsProvider);
 
   for (var i = 0; i < stocks.length; i++) {
     final stock = stocks[i];
     try {
-      await engine.refreshStockFlows(stock.code);
+      await engine.refreshStockFlows(
+        stock.code,
+        reversalNotifyEnabled: settings.reversalNotifyEnabled,
+      );
     } catch (_) {}
     if (i < stocks.length - 1) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -107,6 +106,6 @@ Future<void> refreshAllWatchlist(WidgetRef ref) async {
 
   ref.invalidate(watchlistProvider);
   ref.invalidate(watchlistItemsProvider);
-  ref.invalidate(predictionListProvider);
-  ref.invalidate(predictionStatsProvider);
+  ref.invalidate(positionSignalListProvider);
+  ref.invalidate(positionSignalSummaryProvider);
 }
