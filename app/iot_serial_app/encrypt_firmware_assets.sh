@@ -29,7 +29,51 @@ Options:
   -h, --help       显示此帮助
 
 密钥: ../firmware_aes_key.hex（与 iot_serial_app 同级目录）
+Gitee Token（私有仓 OTA）: ../firmware_gitee_token.txt（见 ../firmware_gitee_token.txt.example）
 EOF
+}
+
+read_gitee_token() {
+  local token_file="$PARENT/firmware_gitee_token.txt"
+  if [[ ! -f "$token_file" ]]; then
+    return 1
+  fi
+  local token
+  token="$(grep -v '^[[:space:]]*#' "$token_file" | tr -d ' \t\r\n' | head -1)"
+  if [[ -z "$token" || "$token" == your_gitee_private_token_here ]]; then
+    return 1
+  fi
+  printf '%s' "$token"
+}
+
+write_dart_defines() {
+  local key_hex="$1"
+  local gitee_token="${2:-}"
+  local gitee_owner="${GITEE_OWNER:-mayjion}"
+  local gitee_repo="${GITEE_REPO:-iot-ota}"
+  local gitee_branch="${GITEE_BRANCH:-master}"
+  DART_DEFINES="$ROOT/dart_defines.json"
+  GITEE_TOKEN="$gitee_token" python3 <<PY
+import json, os
+out = {
+    "FIRMWARE_AES_KEY_HEX": "$key_hex",
+    "FIRMWARE_GITEE_OWNER": "$gitee_owner",
+    "FIRMWARE_GITEE_REPO": "$gitee_repo",
+    "FIRMWARE_GITEE_BRANCH": "$gitee_branch",
+}
+token = os.environ.get("GITEE_TOKEN", "")
+if token:
+    out["FIRMWARE_GITEE_TOKEN"] = token
+with open("$DART_DEFINES", "w", encoding="utf-8") as f:
+    json.dump(out, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
+  echo "==> 已写入 $DART_DEFINES（flutter run --dart-define-from-file=dart_defines.json）"
+  if [[ -n "$gitee_token" ]]; then
+    echo "    含 FIRMWARE_GITEE_TOKEN（私有 Gitee OTA）"
+  else
+    echo "    未配置 Gitee Token（远程 OTA 仅适用于公开 raw 链接）"
+  fi
 }
 
 read_key_hex() {
@@ -137,9 +181,13 @@ dart run tool/verify_release_assets.dart
 echo "==> 校验 .enc 与密钥一致"
 FIRMWARE_AES_KEY_HEX="$KEY_HEX" dart run tool/verify_enc_key_match.dart
 
-DART_DEFINES="$ROOT/dart_defines.json"
-printf '%s\n' "{\"FIRMWARE_AES_KEY_HEX\":\"$KEY_HEX\"}" >"$DART_DEFINES"
-echo "==> 已写入 $DART_DEFINES（flutter run --dart-define-from-file=dart_defines.json）"
+GITEE_TOKEN=""
+if GITEE_TOKEN="$(read_gitee_token)"; then
+  echo "==> 已读取 Gitee Token: $PARENT/firmware_gitee_token.txt"
+else
+  echo "==> 提示: 未找到有效 $PARENT/firmware_gitee_token.txt（私有仓 OTA 需配置 Token）" >&2
+fi
+write_dart_defines "$KEY_HEX" "$GITEE_TOKEN"
 
 if ! $do_build; then
   echo ""

@@ -111,6 +111,36 @@ class AppStrings {
       : 'Timed out waiting for the device to finish OTA. Reconnect to FUNLIGHT and verify the version.';
   String get firmwareSuccessReboot =>
       isZh ? '设备正在重启，请稍候重新连接 FUNLIGHT 并读取版本确认。' : 'Device is rebooting; reconnect to FUNLIGHT and verify the version.';
+
+  // Remote firmware OTA (Gitee manifest)
+  String get firmwareCheckUpdate => isZh ? '检查更新' : 'Check update';
+  String get firmwareCheckingUpdate => isZh ? '正在检查远程固件…' : 'Checking remote firmware…';
+  String get firmwareNoRemoteUpdate =>
+      isZh ? '远程仓库无新版本（或无法连接网络）。' : 'No newer remote firmware (or network unavailable).';
+  String get firmwareRemoteUpdateTitle => isZh ? '发现远程固件更新' : 'Remote firmware update';
+  String firmwareRemoteUpdateBody(String current, String remote) => isZh
+      ? '设备版本 $current，远程仓库版本 $remote。下载后可用于 OTA 升级。'
+      : 'Device $current, remote $remote. Download to use for OTA.';
+  String get firmwareDownloadFirmware => isZh ? '下载固件' : 'Download firmware';
+  String get firmwareDownloading => isZh ? '正在下载固件…' : 'Downloading firmware…';
+  String firmwareDownloadProgress(int pct) =>
+      isZh ? '下载进度 $pct%' : 'Download $pct%';
+  String get firmwareDownloadDone => isZh ? '固件已下载到本地' : 'Firmware saved locally';
+  String get firmwareDownloadFailed => isZh ? '固件下载失败' : 'Firmware download failed';
+  String get firmwareChecksumFailed => isZh ? '固件校验失败' : 'Firmware checksum failed';
+  String get firmwareUseRemoteFirmware => isZh ? '将使用已下载的远程固件' : 'Using downloaded remote firmware';
+  String get firmwareRemoteNetworkHint => isZh
+      ? '下载远程固件需要互联网。连接设备热点时请开启移动数据，或使用双网卡。'
+      : 'Downloading requires internet. On device AP, enable cellular or use dual network.';
+  String get firmwareRemoteNetworkError => isZh
+      ? '无法连接远程服务器。请开启移动数据；若已连设备热点，请同时开启移动数据或使用双网卡。'
+      : 'Cannot reach remote server. Enable cellular; if on device AP, use cellular or dual network.';
+  String get firmwareRemoteTokenRequired => isZh
+      ? '远程 OTA 需要 Gitee Token。请配置 firmware_gitee_token.txt 后重新打包 APK。'
+      : 'Remote OTA requires a Gitee token. Configure firmware_gitee_token.txt and rebuild the APK.';
+  String get firmwareRemoteTokenInvalid => isZh
+      ? 'Gitee Token 无效或已过期。请在 Gitee 重新生成令牌并更新 firmware_gitee_token.txt 后重打 APK。'
+      : 'Gitee token invalid or expired. Regenerate the token, update firmware_gitee_token.txt, and rebuild.';
 }
 
 final appStringsProvider = Provider<AppStrings>((ref) {

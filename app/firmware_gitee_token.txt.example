@@ -1,0 +1,7 @@
+# Gitee 私人令牌（只读 iot-ota 私有仓），复制为 firmware_gitee_token.txt
+# 位置: 与 iot_serial_app 同级目录（即 cursor/app/firmware_gitee_token.txt）
+#
+# 在 Gitee: 设置 → 安全设置 → 私人令牌 → 生成（勾选 projects 只读）
+# 勿将 firmware_gitee_token.txt 提交到 Git
+
+your_gitee_private_token_here

@@ -16,6 +16,9 @@ import '../../core/firmware/firmware_target_chip.dart';
 import '../../core/firmware/fun_ap_ota_client.dart';
 import '../../core/firmware/ota_debug_log.dart';
 import '../../core/firmware/tri_dtu_catalog.dart';
+import '../../core/firmware/remote/firmware_manifest.dart';
+import '../../core/firmware/remote/firmware_remote_errors.dart';
+import '../../core/firmware/remote/firmware_remote_repository.dart';
 import '../../core/settings/app_strings.dart';
 
 class FirmwareUpgradeScreen extends ConsumerStatefulWidget {
@@ -39,7 +42,18 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
   bool _uploadBusy = false;
   String? _uploadStatus;
 
-  final FirmwareAssetLoader _firmwareLoader = FirmwareAssetLoader();
+  late final FirmwareRemoteRepository _remoteRepo;
+  late final FirmwareAssetLoader _firmwareLoader;
+
+  bool _manifestBusy = false;
+  String? _manifestError;
+  FirmwareManifestEntry? _remoteEntry;
+  bool _remoteUpdateAvailable = false;
+
+  bool _downloadBusy = false;
+  int _downloadProgress = 0;
+  String? _downloadError;
+  String? _remoteCachePath;
 
   Future<void> _refreshNetwork() async {
     setState(() {
@@ -90,11 +104,101 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
 
   bool get _environmentOk => _ssidLooksLikeFunAp && _gatewayLooksLikeSoftAp;
 
+  Future<void> _checkRemoteUpdate({bool showNoUpdateSnack = false}) async {
+    final device = _deviceInfo;
+    if (device == null) return;
+
+    setState(() {
+      _manifestBusy = true;
+      _manifestError = null;
+      _remoteEntry = null;
+      _remoteUpdateAvailable = false;
+    });
+
+    try {
+      final manifest = await _remoteRepo.fetchManifest();
+      final entry = _remoteRepo.findEntryForProduct(manifest, device.product);
+      if (!mounted) return;
+
+      final hasUpdate = entry != null &&
+          _remoteRepo.hasUpdateForDevice(
+            entry: entry,
+            deviceVersion: device.version,
+          );
+      String? cachedPath;
+      if (entry != null && await _remoteRepo.isCached(entry)) {
+        cachedPath = await _remoteRepo.cachedPathForEntry(entry);
+      }
+
+      setState(() {
+        _manifestBusy = false;
+        _remoteEntry = entry;
+        _remoteUpdateAvailable = hasUpdate;
+        _remoteCachePath = cachedPath;
+      });
+
+      if (showNoUpdateSnack && !hasUpdate && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ref.read(appStringsProvider).firmwareNoRemoteUpdate)),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final strings = ref.read(appStringsProvider);
+      setState(() {
+        _manifestBusy = false;
+        _manifestError = formatFirmwareRemoteError(e, strings);
+      });
+    }
+  }
+
+  Future<void> _downloadRemoteFirmware() async {
+    final entry = _remoteEntry;
+    if (entry == null) return;
+    final strings = ref.read(appStringsProvider);
+
+    setState(() {
+      _downloadBusy = true;
+      _downloadProgress = 0;
+      _downloadError = null;
+    });
+
+    try {
+      final path = await _remoteRepo.downloadFirmware(
+        entry,
+        onProgress: (received, total) {
+          if (!mounted || total <= 0) return;
+          setState(() {
+            _downloadProgress = ((received * 100) / total).clamp(0, 100).round();
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _downloadBusy = false;
+        _downloadProgress = 100;
+        _remoteCachePath = path;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.firmwareDownloadDone)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _downloadBusy = false;
+        _downloadError = formatFirmwareRemoteError(e, strings);
+      });
+    }
+  }
+
   Future<void> _probeDevice() async {
     setState(() {
       _probeBusy = true;
       _probeError = null;
       _deviceInfo = null;
+      _remoteEntry = null;
+      _remoteUpdateAvailable = false;
+      _remoteCachePath = null;
     });
     final client = FunApOtaClient();
     try {
@@ -130,6 +234,7 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         }
         _probeBusy = false;
       });
+      await _checkRemoteUpdate();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -165,7 +270,7 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
         device != null && isBurnerCrossFamilyUpgrade(entry, device.product);
     final confirmBody = crossFamily
         ? strings.firmwareConfirmBodyCrossFamily(
-            device!.product,
+            device.product,
             entry.titleForLocale(isZh: strings.isZh),
           )
         : strings.firmwareConfirmBody(entry.titleForLocale(isZh: strings.isZh));
@@ -197,7 +302,12 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
 
     final client = FunApOtaClient();
     try {
-      final bytes = await _firmwareLoader.loadFirmwarePlainBytes(entry);
+      final cachePath = _remoteCachePath ??
+          await _remoteRepo.cachedPathForCatalogEntry(entry);
+      final bytes = await _firmwareLoader.loadFirmwarePlainBytesFromCacheOrAsset(
+        entry,
+        cachePath: cachePath,
+      );
 
       final status = await client
           .uploadFirmwareComplete(
@@ -256,8 +366,86 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
   @override
   void initState() {
     super.initState();
+    _remoteRepo = FirmwareRemoteRepository();
+    _firmwareLoader = FirmwareAssetLoader(cache: _remoteRepo.cache);
     otaLogPhase('firmware_screen_open');
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshNetwork());
+  }
+
+  @override
+  void dispose() {
+    _remoteRepo.close();
+    super.dispose();
+  }
+
+  Widget _buildRemoteUpdateCard(AppStrings strings) {
+    final entry = _remoteEntry;
+    final device = _deviceInfo;
+    if (entry == null || device == null || !_remoteUpdateAvailable) {
+      return const SizedBox.shrink();
+    }
+
+    final changelog = strings.isZh
+        ? (entry.changelogZh ?? '')
+        : (entry.changelogEn ?? '');
+    final hasCache = _remoteCachePath != null;
+
+    return Card(
+      color: Theme.of(context).colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(strings.firmwareRemoteUpdateTitle, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+              strings.firmwareRemoteUpdateBody(
+                device.version ?? strings.firmwareUnknown,
+                entry.version,
+              ),
+            ),
+            if (changelog.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(changelog, style: Theme.of(context).textTheme.bodySmall),
+            ],
+            const SizedBox(height: 4),
+            Text(
+              strings.firmwareRemoteNetworkHint,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+            ),
+            if (hasCache) ...[
+              const SizedBox(height: 8),
+              Text(
+                strings.firmwareUseRemoteFirmware,
+                style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (_downloadBusy) ...[
+              LinearProgressIndicator(value: _downloadProgress > 0 ? _downloadProgress / 100 : null),
+              const SizedBox(height: 8),
+              Text(
+                _downloadProgress > 0
+                    ? strings.firmwareDownloadProgress(_downloadProgress)
+                    : strings.firmwareDownloading,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ] else if (!hasCache)
+              FilledButton.tonal(
+                onPressed: _downloadBusy ? null : _downloadRemoteFirmware,
+                child: Text(strings.firmwareDownloadFirmware),
+              ),
+            if (_downloadError != null) ...[
+              const SizedBox(height: 8),
+              Text(_downloadError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -279,6 +467,21 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            onPressed: _deviceInfo == null || _manifestBusy
+                ? null
+                : () => _checkRemoteUpdate(showNoUpdateSnack: true),
+            tooltip: strings.firmwareCheckUpdate,
+            icon: _manifestBusy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download_outlined),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -340,6 +543,10 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
             const SizedBox(height: 8),
             Text(_probeError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
+          if (_manifestError != null) ...[
+            const SizedBox(height: 8),
+            Text(_manifestError!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
+          ],
           if (_deviceInfo != null) ...[
             const SizedBox(height: 16),
             Card(
@@ -364,6 +571,8 @@ class _FirmwareUpgradeScreenState extends ConsumerState<FirmwareUpgradeScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            _buildRemoteUpdateCard(strings),
             const SizedBox(height: 8),
             Text(
               _deviceInfo!.isFlasherBurner

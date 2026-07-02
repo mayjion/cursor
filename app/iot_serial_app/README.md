@@ -106,6 +106,45 @@ flutter install --release
 
 更完整的说明（签名、自检、命令表）见 [RELEASE_APK.md](RELEASE_APK.md)。
 
+### 远程 OTA（Gitee iot-ota）
+
+APP 从 Gitee 仓 `mayjion/iot-ota` 拉取固件版本清单与加密固件。固件升级页在读取设备信息后会自动检查远程是否有新版本；用户确认后才下载 `.bin.enc` 到本地缓存，上传时优先使用缓存（解密逻辑与内置 assets 相同）。内置 `assets/firmware/` 作为离线兜底。
+
+#### 公开仓（无 Token）
+
+默认 manifest raw 链接：
+
+```text
+https://gitee.com/mayjion/iot-ota/raw/master/manifest.json
+```
+
+#### 私有仓（需 Gitee Token）
+
+私有仓 **不支持** raw 直链（即使带 `access_token` 也会 403）。带 Token 的 release 包会通过 **Gitee API v5** 拉取 `manifest.json` 与 `firmware/*.bin.enc`。
+
+1. 复制模板并填入只读 Token（与 `iot_serial_app` 同级目录）：
+
+   ```bash
+   cp ../firmware_gitee_token.txt.example ../firmware_gitee_token.txt
+   # 编辑 firmware_gitee_token.txt，一行 token
+   ```
+
+2. 打包时 `./encrypt_firmware_assets.sh` 会自动读取 Token 并写入 `dart_defines.json`（与 AES 密钥同模式）。
+
+3. 使用 `--dart-define-from-file=dart_defines.json` 构建 release APK。
+
+Token 文件已加入 `.gitignore`，**切勿提交**。Token 可从 APK 中提取，请仅授予仓库只读权限并定期轮换。
+
+无 Token 的 APK 在私有仓上会提示「远程 OTA 需要 Gitee Token」；Token 无效时提示重新生成。
+
+覆盖 manifest URL（公开仓 fallback，可选）：
+
+```bash
+flutter run --dart-define=FIRMWARE_MANIFEST_URL=https://example.com/manifest.json
+```
+
+固件发布与推送流程见同级目录 [iot-ota/README.md](../../iot-ota/README.md)。
+
 ### iOS
 
 需在 macOS 上配置 Xcode 与证书后执行：
