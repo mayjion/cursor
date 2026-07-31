@@ -18,6 +18,7 @@ class EnvSettings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8787
     admin_token: str = ""
+    app_password: str = ""
 
 
 @lru_cache
@@ -40,6 +41,10 @@ def settings() -> dict[str, Any]:
     base["host"] = env.host or base.get("host", "0.0.0.0")
     base["port"] = env.port or base.get("port", 8787)
     base["admin_token"] = env.admin_token
+    if env.app_password:
+        base["app_password"] = env.app_password
+    elif "app_password" not in base:
+        base["app_password"] = "sprite123"
     return base
 
 

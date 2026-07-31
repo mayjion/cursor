@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/eastmoney_client.dart';
+import '../api/watchlist_repository.dart';
 import '../engine/etf_flow_model.dart';
 import '../engine/etf_score_service.dart';
 import '../models/etf_models.dart';
@@ -288,7 +289,8 @@ Future<BulkAddEtfResult> bulkAddEtfsByScale(
       ),
     );
   }
-  await WatchlistStorage.saveMany(toAdd);
+  await WatchlistRepository.saveMany(ref, toAdd);
+  ref.invalidate(watchlistPayloadProvider);
   ref.invalidate(watchlistProvider);
   ref.invalidate(watchlistItemsProvider);
   ref.invalidate(etfWatchlistProvider);
@@ -308,13 +310,13 @@ Future<int> clearAllEtfs(WidgetRef ref) async {
   final all = await WatchlistStorage.list();
   final etfs = all.where((e) => e.assetType == AssetType.etf).toList();
   if (etfs.isEmpty) return 0;
-  final ids = etfs.map((e) => e.id).toList();
   final codes = etfs.map((e) => e.code).toList();
-  await WatchlistStorage.deleteMany(ids);
+  await WatchlistRepository.deleteMany(ref, codes);
   await EtfScoreStorage.deleteMany(codes);
   await EtfShareCacheStorage.deleteMany(codes);
   await EtfAddRulePackStorage.clear();
   ref.read(etfScoreMapProvider.notifier).removeCodes(codes);
+  ref.invalidate(watchlistPayloadProvider);
   ref.invalidate(watchlistProvider);
   ref.invalidate(watchlistItemsProvider);
   ref.invalidate(etfWatchlistProvider);

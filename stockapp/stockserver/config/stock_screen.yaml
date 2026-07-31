@@ -1,14 +1,15 @@
 # A股初选与推荐池（公开数据，零付费）
-version: 1
+version: 2
 
 insider_days: 90
 min_upside: 0.30
-max_price_percentile: 0.35
+# 综合估值分门槛（PE/增速/PB/PEG）；不再用一年价格分位作硬门槛
+min_valuation_score: 55
 price_lookback: 250
 pool_size: 30
 exclude_st: true
 
-# 综合评分权重（归一化）
+# 综合评分权重（归一化）；undervalue=综合估值分，insider=所有权信号强度
 weights:
   undervalue: 0.30
   upside: 0.25
@@ -22,5 +23,8 @@ report_page_size: 100
 insider_page_size: 500
 
 disclosure: >
-  研报目标价为卖方观点且覆盖不全；一年价格分位为估值代理，非绝对低估。
+  入池条件：近90日所有权信号（高管增持或公司回购或大股东增持计划）
+  ∩ 研报目标价/隐含目标价上行≥30% ∩ 综合估值分达标。
+  目标价优先用卖方显式目标价，否则用一致预期 EPS×PE 隐含；
+  综合估值综合 PE_TTM、业绩增速、PB、PEG，一年价格分位仅作弱参考。
   仅供个人研究，不构成投资建议。

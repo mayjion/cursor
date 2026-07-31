@@ -6,11 +6,12 @@ import '../../core/models/etf_models.dart';
 import '../../core/models/position_signal.dart';
 import '../../core/models/position_signal_record.dart';
 import '../../core/models/watch_stock.dart';
+import '../../core/api/watchlist_repository.dart';
 import '../../core/providers/etf_providers.dart';
+import '../../core/providers/server_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/storage/etf_share_cache_storage.dart';
-import '../../core/storage/watchlist_storage.dart';
 import 'add_stock_sheet.dart';
 import 'bulk_add_etf_sheet.dart';
 import 'etf_watch_card.dart';
@@ -93,6 +94,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
       builder: (_) => const AddStockSheet(),
     );
     if (added == true) {
+      ref.invalidate(watchlistPayloadProvider);
       ref.invalidate(watchlistProvider);
       ref.invalidate(watchlistItemsProvider);
       ref.invalidate(etfWatchlistProvider);
@@ -185,7 +187,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final conn = ref.watch(serverConnectionProvider);
     final asyncList = ref.watch(watchlistProvider);
+    final statsAsync = ref.watch(watchlistStatsProvider);
     final itemsMap = ref.watch(watchlistItemsProvider).valueOrNull ?? {};
     final scoreMap = ref.watch(etfScoreMapProvider);
     final sync = ref.watch(etfSyncProvider);
@@ -270,38 +274,66 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             ),
         ],
       ),
-      body: asyncList.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (stocks) {
-          final equity =
-              stocks.where((s) => s.assetType == AssetType.stock).toList();
-          final etfs =
-              stocks.where((s) => s.assetType == AssetType.etf).toList();
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildGrid(
-                strings: strings,
-                stocks: _sortedBySignal(equity, itemsMap),
-                emptyHint: strings.emptyWatchlist,
-                onTap: (s) => context.push('/watchlist/stock/${s.code}'),
-                onRefresh: _onRefreshStocks,
+      body: !conn.connected
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  strings.isZh
+                      ? '自选数据保存在服务端，请先到设置连接 stockserver'
+                      : 'Watchlist is stored on server. Connect stockserver in Settings.',
+                  textAlign: TextAlign.center,
+                ),
               ),
-              _buildGrid(
-                strings: strings,
-                stocks: _sortedEtfsByFitness(etfs, scoreMap),
-                emptyHint: strings.etfOverviewEmpty,
-                onTap: (s) => context.push('/watchlist/etf/${s.code}'),
-                etfScores: scoreMap,
-                showBulkAdd: true,
-                onRefresh: _onRefreshEtfs,
-                syncing: sync.running,
-              ),
-            ],
-          );
-        },
-      ),
+            )
+          : Column(
+              children: [
+                statsAsync.when(
+                  data: (stats) => _WatchlistStatsBar(stats: stats, strings: strings),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+                Expanded(
+                  child: asyncList.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('$e')),
+                    data: (stocks) {
+                      final equity = stocks
+                          .where((s) => s.assetType == AssetType.stock)
+                          .toList();
+                      final etfs = stocks
+                          .where((s) => s.assetType == AssetType.etf)
+                          .toList();
+                      return TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildGrid(
+                            strings: strings,
+                            stocks: _sortedBySignal(equity, itemsMap),
+                            emptyHint: strings.emptyWatchlist,
+                            onTap: (s) =>
+                                context.push('/watchlist/stock/${s.code}'),
+                            onRefresh: _onRefreshStocks,
+                          ),
+                          _buildGrid(
+                            strings: strings,
+                            stocks: _sortedEtfsByFitness(etfs, scoreMap),
+                            emptyHint: strings.etfOverviewEmpty,
+                            onTap: (s) =>
+                                context.push('/watchlist/etf/${s.code}'),
+                            etfScores: scoreMap,
+                            showBulkAdd: true,
+                            onRefresh: _onRefreshEtfs,
+                            syncing: sync.running,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
       floatingActionButton: _tabController.index == 1
           ? Column(
               mainAxisSize: MainAxisSize.min,
@@ -398,27 +430,96 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               syncing: syncing && etfScores[s.code] == null,
               onTap: () => onTap(s),
               onDelete: () async {
-                await WatchlistStorage.delete(s.id);
-                ref.read(etfScoreMapProvider.notifier).removeCodes([s.code]);
-                await EtfShareCacheStorage.deleteMany([s.code]);
-                ref.invalidate(watchlistProvider);
-                ref.invalidate(watchlistItemsProvider);
-                ref.invalidate(etfWatchlistProvider);
+                try {
+                  await WatchlistRepository.delete(ref, s.code);
+                  ref.read(etfScoreMapProvider.notifier).removeCodes([s.code]);
+                  await EtfShareCacheStorage.deleteMany([s.code]);
+                  ref.invalidate(watchlistPayloadProvider);
+                  ref.invalidate(watchlistProvider);
+                  ref.invalidate(watchlistItemsProvider);
+                  ref.invalidate(etfWatchlistProvider);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$e')),
+                    );
+                  }
+                }
               },
             );
           }
           return WatchStockCard(
-            code: s.code,
-            name: s.name,
+            stock: s,
             onTap: () => onTap(s),
             onDelete: () async {
-              await WatchlistStorage.delete(s.id);
-              ref.invalidate(watchlistProvider);
-              ref.invalidate(watchlistItemsProvider);
-              ref.invalidate(etfWatchlistProvider);
+              try {
+                await WatchlistRepository.delete(ref, s.code);
+                ref.invalidate(watchlistPayloadProvider);
+                ref.invalidate(watchlistProvider);
+                ref.invalidate(watchlistItemsProvider);
+                ref.invalidate(etfWatchlistProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$e')),
+                  );
+                }
+              }
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _WatchlistStatsBar extends StatelessWidget {
+  const _WatchlistStatsBar({required this.stats, required this.strings});
+
+  final WatchlistStats stats;
+  final AppStrings strings;
+
+  String _pct(double? v) {
+    if (v == null) return '--';
+    final p = v * 100;
+    final sign = p > 0 ? '+' : '';
+    return '$sign${p.toStringAsFixed(2)}%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (stats.count == 0) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final avg = stats.avgReturnPct;
+    final avgColor = avg == null
+        ? scheme.onSurfaceVariant
+        : (avg >= 0 ? scheme.primary : scheme.error);
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                strings.isZh
+                    ? '自选 ${stats.count} · 均收益 ${_pct(avg)} · 胜率 ${stats.winRate == null ? '--' : '${(stats.winRate! * 100).toStringAsFixed(0)}%'}'
+                    : 'Watch ${stats.count} · avg ${_pct(avg)} · win ${stats.winRate == null ? '--' : '${(stats.winRate! * 100).toStringAsFixed(0)}%'}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: avgColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+            if (stats.bestCode != null)
+              Text(
+                strings.isZh
+                    ? '最佳 ${stats.bestName ?? stats.bestCode} ${_pct(stats.bestReturnPct)}'
+                    : 'Best ${stats.bestName ?? stats.bestCode} ${_pct(stats.bestReturnPct)}',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+          ],
+        ),
       ),
     );
   }

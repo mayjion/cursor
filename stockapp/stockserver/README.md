@@ -17,6 +17,7 @@ chmod +x scripts/run.sh scripts/collect_once.sh
 - 局域网：http://\<本机IP\>:8787
 - 预警页：http://127.0.0.1:8787/alerts
 - App 发现：UDP `48787` 广播 + `/api/health`（手机「搜索局域网」）
+- App 连接密码：默认 `sprite123`（`config/settings.yaml` 的 `app_password`，或环境变量 `APP_PASSWORD`）；除 `/api/health`、`/api/auth` 外需请求头 `X-App-Password`
 
 ## Docker
 
@@ -38,12 +39,18 @@ docker compose up -d --build
 | `GET /api/timing` | 今日择时行动（受回测门控） |
 | `GET /api/timing/backtest?window=252` | 半年/一年加→减交易与指标 |
 | `POST /api/admin/collect` | 全量采集评分 |
+| `GET /api/stocks/pool` | A 股初选推荐池 |
+| `GET /api/watchlist` | 自选列表 + 加入后收益率统计 |
+| `POST /api/watchlist` | 加入自选（记录加入价） |
+| `DELETE /api/watchlist/{code}` | 移除自选 |
+| `POST /api/admin/stock-screen` | 强制重跑初选（需 admin token） |
 
 ## 配置
 
 - `config/etf_universe.yaml` — ETF 池与因子（`public` / `proxy` / `stub`）
 - `config/settings.yaml` — 端口、限频、缓存 TTL
 - `config/events.yaml` — 手工事件（并入预警）
+- `config/stock_screen.yaml` — A 股初选：所有权信号（增持/回购/大股东增持）∩ 研报上行 ∩ 综合估值（PE/增速/PB/PEG）
 
 ## 数据策略
 

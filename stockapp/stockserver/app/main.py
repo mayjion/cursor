@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
+from app.auth import app_password_middleware
 from app.db.store import init_db
 from app.discovery.beacon import start_discovery_beacon, stop_discovery_beacon
 from app.jobs.scheduler import start_scheduler, stop_scheduler
@@ -20,6 +21,7 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
 app = FastAPI(title="stockserver", version="0.3.0", description="投资观察后台（公开数据）")
+app.middleware("http")(app_password_middleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

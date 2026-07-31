@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/eastmoney_client.dart';
+import '../api/watchlist_repository.dart';
 import '../models/capital_flow_day.dart';
 import '../models/position_signal_record.dart';
 import '../models/watch_stock.dart';
 import '../position/position_signal_engine.dart';
+import '../providers/server_providers.dart';
 import '../storage/flow_cache_storage.dart';
 import '../storage/position_signal_storage.dart';
 import '../settings/app_settings.dart';
@@ -22,8 +24,22 @@ final positionSignalEngineProvider = Provider<PositionSignalEngine>((ref) {
   );
 });
 
+final watchlistPayloadProvider = FutureProvider<WatchlistPayload>((ref) async {
+  ref.watch(serverConnectionProvider);
+  ref.watch(stockServerClientProvider);
+  final payload = await WatchlistRepository.fetch(ref, refresh: true);
+  WatchlistStorage.setCache(payload.items);
+  return payload;
+});
+
 final watchlistProvider = FutureProvider<List<WatchStock>>((ref) async {
-  return WatchlistStorage.list();
+  final payload = await ref.watch(watchlistPayloadProvider.future);
+  return payload.items;
+});
+
+final watchlistStatsProvider = FutureProvider<WatchlistStats>((ref) async {
+  final payload = await ref.watch(watchlistPayloadProvider.future);
+  return payload.stats;
 });
 
 final positionSignalListProvider =
@@ -91,7 +107,7 @@ final watchlistItemsProvider =
 });
 
 Future<void> refreshAllWatchlist(WidgetRef ref) async {
-  final stocks = await WatchlistStorage.list();
+  final stocks = await ref.read(watchlistProvider.future);
   final engine = ref.read(positionSignalEngineProvider);
   final settings = ref.read(appSettingsProvider);
 
@@ -110,7 +126,9 @@ Future<void> refreshAllWatchlist(WidgetRef ref) async {
     }
   }
 
+  ref.invalidate(watchlistPayloadProvider);
   ref.invalidate(watchlistProvider);
+  ref.invalidate(watchlistStatsProvider);
   ref.invalidate(watchlistItemsProvider);
   ref.invalidate(positionSignalListProvider);
   ref.invalidate(positionSignalSummaryProvider);

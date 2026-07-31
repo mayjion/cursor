@@ -5,11 +5,10 @@ import '../engine/local_scan_engine.dart';
 import '../models/institutional_hold_change_record.dart';
 import '../models/recommendation.dart';
 import '../models/stock_snapshot.dart';
-import '../models/watch_stock.dart';
 import '../notifications/notification_service.dart';
 import '../settings/app_settings.dart';
 import '../storage/recommendation_cache_storage.dart';
-import '../storage/watchlist_storage.dart';
+import '../api/watchlist_repository.dart';
 import 'stock_providers.dart';
 
 final localScanEngineProvider = Provider<LocalScanEngine>((ref) {
@@ -141,19 +140,20 @@ final recommendationHistoryProvider =
   return RecommendationCacheStorage.loadHistoryFlat();
 });
 
-Future<bool> addRecommendationToWatchlist(RecommendationItem item) async {
-  final existing = await WatchlistStorage.getByCode(item.code);
+Future<bool> addRecommendationToWatchlist(
+  WidgetRef ref,
+  RecommendationItem item,
+) async {
+  final existing = await WatchlistRepository.getByCodeWidget(ref, item.code);
   if (existing != null) return false;
   final market = item.code.startsWith('6') ? 'SH' : 'SZ';
-  await WatchlistStorage.save(
-    WatchStock(
-      id: '${item.code}_${DateTime.now().millisecondsSinceEpoch}',
-      code: item.code,
-      name: item.name,
-      market: market,
-      addedAt: DateTime.now(),
-    ),
+  await WatchlistRepository.save(
+    ref,
+    code: item.code,
+    name: item.name,
+    market: market,
   );
+  ref.invalidate(watchlistPayloadProvider);
   return true;
 }
 

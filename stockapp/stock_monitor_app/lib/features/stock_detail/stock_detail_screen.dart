@@ -8,7 +8,6 @@ import '../../core/models/position_signal_record.dart';
 import '../../core/models/recommendation.dart';
 import '../../core/models/stock_bar.dart';
 import '../../core/models/today_flow_display.dart';
-import '../../core/models/watch_stock.dart';
 import '../../core/position/position_signal_analyzer.dart';
 import '../../core/providers/investment_providers.dart';
 import '../../core/providers/stock_providers.dart';
@@ -16,7 +15,7 @@ import '../../core/settings/app_strings.dart';
 import '../../core/settings/app_theme.dart';
 import '../../core/storage/flow_cache_storage.dart';
 import '../../core/storage/position_signal_storage.dart';
-import '../../core/storage/watchlist_storage.dart';
+import '../../core/api/watchlist_repository.dart';
 import 'flow_charts.dart';
 
 class StockDetailScreen extends ConsumerStatefulWidget {
@@ -53,9 +52,14 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final stock = await WatchlistStorage.getByCode(widget.code);
-    _inWatchlist = stock != null;
-    _name = stock?.name ?? widget.code;
+    try {
+      final stock = await WatchlistRepository.getByCodeWidget(ref, widget.code);
+      _inWatchlist = stock != null;
+      _name = stock?.name ?? widget.code;
+    } catch (_) {
+      _inWatchlist = false;
+      _name = widget.code;
+    }
 
     try {
       final profile = await ref.read(stockProfileProvider(widget.code).future);
@@ -87,36 +91,39 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
 
   Future<void> _toggleWatchlist() async {
     final strings = ref.read(appStringsProvider);
-    if (_inWatchlist) {
-      final stock = await WatchlistStorage.getByCode(widget.code);
-      if (stock != null) {
-        await WatchlistStorage.delete(stock.id);
-      }
-      setState(() => _inWatchlist = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.removeFromWatchlist)),
-        );
-      }
-    } else {
-      final market = widget.code.startsWith('6') ? 'SH' : 'SZ';
-      await WatchlistStorage.save(
-        WatchStock(
-          id: '${widget.code}_${DateTime.now().millisecondsSinceEpoch}',
+    try {
+      if (_inWatchlist) {
+        await WatchlistRepository.delete(ref, widget.code);
+        setState(() => _inWatchlist = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.removeFromWatchlist)),
+          );
+        }
+      } else {
+        final market = widget.code.startsWith('6') ? 'SH' : 'SZ';
+        await WatchlistRepository.save(
+          ref,
           code: widget.code,
           name: _name,
           market: market,
-          addedAt: DateTime.now(),
-        ),
-      );
-      setState(() => _inWatchlist = true);
+        );
+        setState(() => _inWatchlist = true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.addedToWatchlist)),
+          );
+        }
+      }
+      ref.invalidate(watchlistPayloadProvider);
+      ref.invalidate(watchlistProvider);
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.addedToWatchlist)),
+          SnackBar(content: Text('$e')),
         );
       }
     }
-    ref.invalidate(watchlistProvider);
   }
 
   TodayFlowDisplay? get _todayDisplay =>

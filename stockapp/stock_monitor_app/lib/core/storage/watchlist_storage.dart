@@ -1,60 +1,48 @@
-import 'dart:convert';
-
-import 'package:hive_flutter/hive_flutter.dart';
-
 import '../models/watch_stock.dart';
 
-const String _boxName = 'watchlist';
-
+/// 自选仅作内存缓存（真相源在 stockserver，不落手机盘）。
 class WatchlistStorage {
-  static Box<String>? _box;
+  static List<WatchStock> _cache = [];
 
-  static Future<void> ensureOpen() async {
-    _box ??= await Hive.openBox<String>(_boxName);
+  static void setCache(List<WatchStock> items) {
+    _cache = List<WatchStock>.from(items);
   }
 
-  static Future<void> save(WatchStock stock) async {
-    await ensureOpen();
-    await _box!.put(stock.id, jsonEncode(stock.toJson()));
-  }
+  static void clearCache() => _cache = [];
 
-  static Future<void> saveMany(Iterable<WatchStock> stocks) async {
-    await ensureOpen();
-    final map = <String, String>{
-      for (final s in stocks) s.id: jsonEncode(s.toJson()),
-    };
-    if (map.isNotEmpty) await _box!.putAll(map);
-  }
-
-  static Future<void> deleteMany(Iterable<String> ids) async {
-    await ensureOpen();
-    final list = ids.toList();
-    if (list.isNotEmpty) await _box!.deleteAll(list);
-  }
-
-  static Future<void> delete(String id) async {
-    await ensureOpen();
-    await _box!.delete(id);
-  }
+  static Future<void> ensureOpen() async {}
 
   static Future<List<WatchStock>> list() async {
-    await ensureOpen();
-    final list = <WatchStock>[];
-    for (final v in _box!.values) {
-      try {
-        list.add(WatchStock.fromJson(
-            Map<String, dynamic>.from(jsonDecode(v) as Map)));
-      } catch (_) {}
-    }
+    final list = List<WatchStock>.from(_cache);
     list.sort((a, b) => b.addedAt.compareTo(a.addedAt));
     return list;
   }
 
   static Future<WatchStock?> getByCode(String code) async {
-    final all = await list();
-    for (final s in all) {
-      if (s.code == code) return s;
+    final c = code.padLeft(6, '0');
+    for (final s in _cache) {
+      if (s.code == c) return s;
     }
     return null;
+  }
+
+  @Deprecated('Use WatchlistRepository.save')
+  static Future<void> save(WatchStock stock) async {
+    throw UnsupportedError('自选已改为服务端存储，请使用 WatchlistRepository');
+  }
+
+  @Deprecated('Use WatchlistRepository.saveMany')
+  static Future<void> saveMany(Iterable<WatchStock> stocks) async {
+    throw UnsupportedError('自选已改为服务端存储，请使用 WatchlistRepository');
+  }
+
+  @Deprecated('Use WatchlistRepository.delete')
+  static Future<void> delete(String id) async {
+    throw UnsupportedError('自选已改为服务端存储，请使用 WatchlistRepository');
+  }
+
+  @Deprecated('Use WatchlistRepository.deleteMany')
+  static Future<void> deleteMany(Iterable<String> ids) async {
+    throw UnsupportedError('自选已改为服务端存储，请使用 WatchlistRepository');
   }
 }

@@ -19,6 +19,7 @@ class AppSettingsState {
     this.serverEnabled = true,
     this.serverHost = '',
     this.serverPort = 8787,
+    this.serverPassword = '',
     this.ready = false,
   });
 
@@ -38,7 +39,11 @@ class AppSettingsState {
   final bool serverEnabled;
   final String serverHost;
   final int serverPort;
+  /// 已通过校验并保存的连接密码（首次连接后记住）
+  final String serverPassword;
   final bool ready;
+
+  bool get hasServerPassword => serverPassword.trim().isNotEmpty;
 
   Locale get locale =>
       languageCode == 'en' ? const Locale('en') : const Locale('zh');
@@ -65,6 +70,7 @@ class AppSettingsState {
     bool? serverEnabled,
     String? serverHost,
     int? serverPort,
+    String? serverPassword,
     bool? ready,
   }) {
     return AppSettingsState(
@@ -85,6 +91,7 @@ class AppSettingsState {
       serverEnabled: serverEnabled ?? this.serverEnabled,
       serverHost: serverHost ?? this.serverHost,
       serverPort: serverPort ?? this.serverPort,
+      serverPassword: serverPassword ?? this.serverPassword,
       ready: ready ?? this.ready,
     );
   }
@@ -116,6 +123,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     final serverEnabled = _prefs!.getBool('server_enabled') ?? true;
     final serverHost = _prefs!.getString('server_host') ?? '';
     final serverPort = _prefs!.getInt('server_port') ?? 8787;
+    final serverPassword = _prefs!.getString('server_password') ?? '';
     state = AppSettingsState(
       themeIndex: themeIndex.clamp(0, 2),
       languageCode: languageCode == 'en' ? 'en' : 'zh',
@@ -132,6 +140,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
       serverEnabled: serverEnabled,
       serverHost: serverHost,
       serverPort: serverPort.clamp(1, 65535),
+      serverPassword: serverPassword,
       ready: true,
     );
   }
@@ -202,8 +211,13 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
 
   Future<void> setServerHost(String host) async {
     final value = host.trim();
+    final hostChanged =
+        value.isNotEmpty && value != state.serverHost.trim();
     state = state.copyWith(serverHost: value);
     await _prefs?.setString('server_host', value);
+    if (hostChanged) {
+      await clearServerPassword();
+    }
   }
 
   Future<void> setServerPort(int port) async {
@@ -212,9 +226,32 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     await _prefs?.setInt('server_port', value);
   }
 
-  Future<void> setServerEndpoint(String host, int port) async {
-    await setServerHost(host);
+  Future<void> setServerPassword(String password) async {
+    final value = password.trim();
+    state = state.copyWith(serverPassword: value);
+    await _prefs?.setString('server_password', value);
+  }
+
+  Future<void> clearServerPassword() async {
+    state = state.copyWith(serverPassword: '');
+    await _prefs?.remove('server_password');
+  }
+
+  Future<void> setServerEndpoint(
+    String host,
+    int port, {
+    String? password,
+  }) async {
+    final prevHost = state.serverHost.trim();
+    final nextHost = host.trim();
     await setServerPort(port);
+    state = state.copyWith(serverHost: nextHost);
+    await _prefs?.setString('server_host', nextHost);
+    if (password != null) {
+      await setServerPassword(password);
+    } else if (nextHost != prevHost) {
+      await clearServerPassword();
+    }
     await setServerEnabled(true);
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/eastmoney_client.dart';
+import '../../core/api/watchlist_repository.dart';
 import '../../core/engine/etf_flow_model.dart';
 import '../../core/models/etf_models.dart';
 import '../../core/models/stock_bar.dart';
@@ -10,7 +11,6 @@ import '../../core/providers/etf_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/settings/app_theme.dart';
-import '../../core/storage/watchlist_storage.dart';
 
 class EtfDetailScreen extends ConsumerStatefulWidget {
   const EtfDetailScreen({super.key, required this.code});
@@ -32,7 +32,10 @@ class _EtfDetailScreenState extends ConsumerState<EtfDetailScreen> {
   }
 
   Future<void> _loadMeta() async {
-    final stock = await WatchlistStorage.getByCode(widget.code);
+    WatchStock? stock;
+    try {
+      stock = await WatchlistRepository.getByCodeWidget(ref, widget.code);
+    } catch (_) {}
     String name = stock?.name ?? widget.code;
     try {
       final info =
@@ -49,38 +52,43 @@ class _EtfDetailScreenState extends ConsumerState<EtfDetailScreen> {
 
   Future<void> _toggleWatchlist() async {
     final strings = ref.read(appStringsProvider);
-    if (_inWatchlist) {
-      final stock = await WatchlistStorage.getByCode(widget.code);
-      if (stock != null) await WatchlistStorage.delete(stock.id);
-      setState(() => _inWatchlist = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.removeFromWatchlist)),
-        );
-      }
-    } else {
-      final client = ref.read(eastmoneyClientProvider);
-      final info = await client.fetchEtfInfo(widget.code);
-      await WatchlistStorage.save(
-        WatchStock(
-          id: widget.code,
+    try {
+      if (_inWatchlist) {
+        await WatchlistRepository.delete(ref, widget.code);
+        setState(() => _inWatchlist = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.removeFromWatchlist)),
+          );
+        }
+      } else {
+        final client = ref.read(eastmoneyClientProvider);
+        final info = await client.fetchEtfInfo(widget.code);
+        await WatchlistRepository.save(
+          ref,
           code: widget.code,
           name: info?.name ?? _name,
           market: EastmoneyClient.marketFromCode(widget.code),
-          addedAt: DateTime.now(),
           assetType: AssetType.etf,
           indexName: info?.indexName ?? '',
-        ),
-      );
-      setState(() => _inWatchlist = true);
+        );
+        setState(() => _inWatchlist = true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.addedToWatchlist)),
+          );
+        }
+      }
+      ref.invalidate(watchlistPayloadProvider);
+      ref.invalidate(watchlistProvider);
+      ref.invalidate(etfWatchlistProvider);
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.addedToWatchlist)),
+          SnackBar(content: Text('$e')),
         );
       }
     }
-    ref.invalidate(watchlistProvider);
-    ref.invalidate(etfWatchlistProvider);
   }
 
   @override

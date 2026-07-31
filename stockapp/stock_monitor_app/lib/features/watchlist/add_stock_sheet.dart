@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/eastmoney_client.dart';
+import '../../core/api/watchlist_repository.dart';
 import '../../core/models/watch_stock.dart';
 import '../../core/providers/etf_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
-import '../../core/storage/watchlist_storage.dart';
 
 class AddStockSheet extends ConsumerStatefulWidget {
   const AddStockSheet({super.key});
@@ -87,37 +87,40 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
       await _lookup();
       if (_previewName == null) return;
     }
-    final existing = await WatchlistStorage.getByCode(code);
-    if (existing != null) {
-      setState(() {
-        _error = ref.read(appStringsProvider).alreadyInWatchlist;
-      });
-      return;
+    try {
+      final existing = await WatchlistRepository.getByCodeWidget(ref, code);
+      if (existing != null) {
+        setState(() {
+          _error = ref.read(appStringsProvider).alreadyInWatchlist;
+        });
+        return;
+      }
+      final market = EastmoneyClient.marketFromCode(code);
+      await WatchlistRepository.save(
+        ref,
+        code: code,
+        name: _previewName!,
+        market: market,
+        assetType: _assetType,
+        indexName: _indexName ?? '',
+      );
+      if (_assetType == AssetType.etf) {
+        try {
+          final score = await refreshEtfScoreWithClient(
+            ref.read(eastmoneyClientProvider),
+            code,
+          );
+          ref.read(etfScoreMapProvider.notifier).upsert(score);
+        } catch (_) {}
+      }
+      ref.invalidate(watchlistPayloadProvider);
+      ref.invalidate(watchlistProvider);
+      ref.invalidate(watchlistItemsProvider);
+      ref.invalidate(etfWatchlistProvider);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      setState(() => _error = '$e');
     }
-    final market = EastmoneyClient.marketFromCode(code);
-    final stock = WatchStock(
-      id: code,
-      code: code,
-      name: _previewName!,
-      market: market,
-      addedAt: DateTime.now(),
-      assetType: _assetType,
-      indexName: _indexName ?? '',
-    );
-    await WatchlistStorage.save(stock);
-    if (_assetType == AssetType.etf) {
-      try {
-        final score = await refreshEtfScoreWithClient(
-          ref.read(eastmoneyClientProvider),
-          code,
-        );
-        ref.read(etfScoreMapProvider.notifier).upsert(score);
-      } catch (_) {}
-    }
-    ref.invalidate(watchlistProvider);
-    ref.invalidate(watchlistItemsProvider);
-    ref.invalidate(etfWatchlistProvider);
-    if (mounted) Navigator.pop(context, true);
   }
 
   @override

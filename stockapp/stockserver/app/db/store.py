@@ -87,6 +87,17 @@ def init_db() -> None:
               updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS watchlist_items (
+              code TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              market TEXT NOT NULL DEFAULT 'sz',
+              asset_type TEXT NOT NULL DEFAULT 'stock',
+              index_name TEXT NOT NULL DEFAULT '',
+              added_at TEXT NOT NULL,
+              add_price REAL,
+              note TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE INDEX IF NOT EXISTS idx_bars_code_date ON bars(code, trade_date);
             CREATE INDEX IF NOT EXISTS idx_shares_code_date ON shares(code, change_date);
             CREATE INDEX IF NOT EXISTS idx_score_hist_code ON score_history(code, as_of);
@@ -331,3 +342,80 @@ def load_json_meta(key: str) -> Any | None:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# --- watchlist ---
+
+
+def list_watchlist_rows() -> list[dict[str, Any]]:
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT code, name, market, asset_type, index_name, added_at, add_price, note
+            FROM watchlist_items
+            ORDER BY added_at DESC
+            """
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_watchlist_row(code: str) -> dict[str, Any] | None:
+    code = str(code).zfill(6)
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT code, name, market, asset_type, index_name, added_at, add_price, note
+            FROM watchlist_items WHERE code=?
+            """,
+            (code,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def upsert_watchlist_row(row: dict[str, Any]) -> None:
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO watchlist_items(
+              code, name, market, asset_type, index_name, added_at, add_price, note
+            ) VALUES(
+              :code, :name, :market, :asset_type, :index_name, :added_at, :add_price, :note
+            )
+            ON CONFLICT(code) DO UPDATE SET
+              name=excluded.name,
+              market=excluded.market,
+              asset_type=excluded.asset_type,
+              index_name=excluded.index_name,
+              note=excluded.note
+            """,
+            {
+                "code": str(row["code"]).zfill(6),
+                "name": row.get("name") or row["code"],
+                "market": row.get("market") or "sz",
+                "asset_type": row.get("asset_type") or "stock",
+                "index_name": row.get("index_name") or "",
+                "added_at": row.get("added_at") or utc_now_iso(),
+                "add_price": row.get("add_price"),
+                "note": row.get("note") or "",
+            },
+        )
+
+
+def delete_watchlist_row(code: str) -> bool:
+    code = str(code).zfill(6)
+    with connect() as conn:
+        cur = conn.execute("DELETE FROM watchlist_items WHERE code=?", (code,))
+        return cur.rowcount > 0
+
+
+def delete_watchlist_rows(codes: list[str]) -> int:
+    cleaned = [str(c).zfill(6) for c in codes if str(c).strip()]
+    if not cleaned:
+        return 0
+    deleted = 0
+    with connect() as conn:
+        for code in cleaned:
+            cur = conn.execute("DELETE FROM watchlist_items WHERE code=?", (code,))
+            deleted += cur.rowcount
+    return deleted

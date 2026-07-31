@@ -56,10 +56,19 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
       final score = (row['score'] as num?)?.toDouble() ?? 50;
       final upside = (row['upside'] as num?)?.toDouble();
       final pct = (row['price_percentile'] as num?)?.toDouble();
+      final valScore = (row['valuation_score'] as num?)?.toDouble();
+      final pe = (row['pe_ttm'] as num?)?.toDouble();
+      final sources = row['ownership_sources'];
+      final sourceText = sources is List && sources.isNotEmpty
+          ? sources.join('+')
+          : null;
       final reasons = <String>[
-        if (pct != null) '一年价格分位 ${(pct * 100).toStringAsFixed(0)}%',
+        if (valScore != null) '综合估值 ${valScore.toStringAsFixed(0)}',
+        if (pe != null) 'PE ${pe.toStringAsFixed(1)}',
+        if (pct != null) '价格分位 ${(pct * 100).toStringAsFixed(0)}%',
         if (upside != null) '研报上行 ${(upside * 100).toStringAsFixed(0)}%',
-        if (row['insider_events'] != null) '高管增持 ${row['insider_events']} 次',
+        if (sourceText != null) '信号 $sourceText',
+        if (row['has_buyback'] == true) '含回购',
         if (row['report_count'] != null) '研报 ${row['report_count']} 篇',
       ];
       items.add(
@@ -69,7 +78,8 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
           industry: '服务端初选',
           rank: i + 1,
           compositeScore: score,
-          valuationScore: pct == null ? 50 : ((1 - pct) * 100).clamp(0, 100),
+          valuationScore: valScore ??
+              (pct == null ? 50 : ((1 - pct) * 100).clamp(0, 100)),
           growthScore: 50,
           spaceScore: upside == null ? 50 : (upside * 100).clamp(0, 100),
           institutionScore: 60,
@@ -187,8 +197,9 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
                                   onAddWatchlist: () async {
                                     final added =
                                         await addRecommendationToWatchlist(
-                                            item);
+                                            ref, item);
                                     if (context.mounted) {
+                                      ref.invalidate(watchlistPayloadProvider);
                                       ref.invalidate(watchlistProvider);
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
@@ -266,8 +277,9 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
                                   onAddWatchlist: () async {
                                     final added =
                                         await addRecommendationToWatchlist(
-                                            item);
+                                            ref, item);
                                     if (context.mounted) {
+                                      ref.invalidate(watchlistPayloadProvider);
                                       ref.invalidate(watchlistProvider);
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(

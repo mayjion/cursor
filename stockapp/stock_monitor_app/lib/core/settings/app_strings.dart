@@ -253,12 +253,20 @@ class AppStrings {
   String get settingsTitle => isZh ? '设置' : 'Settings';
   String get serverSection => isZh ? '服务端连接' : 'Server';
   String get serverSubtitle => isZh
-      ? '同一局域网可自动搜索；否则请手动填写电脑 IP，端口默认 8787'
-      : 'Auto-discover on LAN, or enter PC IP (default port 8787)';
+      ? '同一局域网可自动搜索；否则请手动填写电脑 IP，端口默认 8787。首次连接需输入密码'
+      : 'Auto-discover on LAN, or enter PC IP (port 8787). Password required on first connect';
   String get serverEnable => isZh ? '使用 stockserver' : 'Use stockserver';
   String get serverHostLabel => isZh ? '服务端 IP / 主机名' : 'Server IP / host';
   String get serverHostHint => isZh ? '例如 192.168.1.8' : 'e.g. 192.168.1.8';
   String get serverPortLabel => isZh ? '端口' : 'Port';
+  String get serverPasswordLabel => isZh ? '连接密码' : 'Password';
+  String get serverPasswordHint => isZh ? '首次连接时输入' : 'Required on first connect';
+  String get serverPasswordTitle => isZh ? '输入服务端密码' : 'Enter server password';
+  String get serverPasswordMessage => isZh
+      ? '首次连接需验证密码，验证通过后本机将记住'
+      : 'Required once; saved on this device after success';
+  String get serverPasswordWrong => isZh ? '密码错误' : 'Wrong password';
+  String get serverPasswordNeeded => isZh ? '请输入连接密码' : 'Enter password';
   String get serverSearchLan => isZh ? '搜索局域网' : 'Search LAN';
   String get serverSearching => isZh ? '正在搜索…' : 'Searching…';
   String get serverTest => isZh ? '测试连接' : 'Test connection';

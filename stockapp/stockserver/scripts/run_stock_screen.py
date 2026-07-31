@@ -21,8 +21,9 @@ async def main() -> None:
     for row in pool[:15]:
         print(
             f"  {row['code']} {row['name']} score={row.get('score')} "
-            f"pct={row.get('price_percentile')} upside={row.get('upside')} "
-            f"insider={row.get('insider_events')} reports={row.get('report_count')}",
+            f"val={row.get('valuation_score')} pe={row.get('pe_ttm')} "
+            f"upside={row.get('upside')} src={row.get('target_source')} "
+            f"own={row.get('ownership_sources')} reports={row.get('report_count')}",
             flush=True,
         )
     if pool:

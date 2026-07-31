@@ -2,6 +2,8 @@ host: "0.0.0.0"
 port: 8787
 # App 局域网自动发现用 UDP 广播端口
 discovery_port: 48787
+# App 首次连接密码（可用环境变量 APP_PASSWORD 覆盖）
+app_password: "sprite123"
 request_gap_ms: 120
 snapshot_cache_ttl_sec: 300
 db_path: "data/stockserver.db"

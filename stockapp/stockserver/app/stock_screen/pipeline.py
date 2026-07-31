@@ -1,4 +1,5 @@
-"""A股初选流水线：高管增持 ∩ 研报上行 ∩ 估值偏低 → Top 池。"""
+"""A股初选流水线：所有权信号 ∩ 研报上行 ∩ 综合估值 → Top 池。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +8,8 @@ from typing import Any
 import httpx
 
 from app.collectors import (
+    eastmoney_ann_signals,
+    eastmoney_fundamentals,
     eastmoney_insider,
     eastmoney_kline,
     eastmoney_quote,
@@ -62,59 +65,75 @@ async def _refresh_candidate_bars(codes: list[str], *, limit: int) -> dict[str, 
     sina_n = 0
     if need:
         sina_n = await sina_stock.refresh_bars(need, limit=limit)
-    return {"eastmoney_bars": em_n, "sina_bars": sina_n, "filled_codes": len(codes) - len(need) + (len(need) if sina_n else 0)}
+    return {
+        "eastmoney_bars": em_n,
+        "sina_bars": sina_n,
+        "filled_codes": len(codes) - len(need) + (len(need) if sina_n else 0),
+    }
 
 
 async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
     cfg = screen_cfg()
     days = int(cfg.get("insider_days", 90))
     min_upside = float(cfg.get("min_upside", 0.30))
-    max_pct = float(cfg.get("max_price_percentile", 0.35))
+    min_val = float(cfg.get("min_valuation_score", 55))
     pool_size = int(cfg.get("pool_size", 30))
     exclude_st = bool(cfg.get("exclude_st", True))
     report_pages = int(cfg.get("report_max_pages", 40))
     report_ps = int(cfg.get("report_page_size", 100))
     insider_ps = int(cfg.get("insider_page_size", 500))
 
-    # 1) 高管增持
-    insider_events = await eastmoney_insider.fetch_executive_increases(
-        days=days, page_size=insider_ps, max_pages=40
-    )
-    insider_by = eastmoney_insider.aggregate_insider_by_code(insider_events)
-
-    # 2) 研报目标价（先不过滤上行，等有现价）
+    # 1) 研报（显式目标价 + 隐含目标价）
     reports = await eastmoney_reports.fetch_reports_with_targets(
         days=days, page_size=report_ps, max_pages=report_pages
     )
-    # 先粗交：两边都有的代码
-    report_codes = {r["code"] for r in reports}
-    insider_codes = set(insider_by.keys())
-    intersect = sorted(insider_codes & report_codes)
+    report_codes = sorted({r["code"] for r in reports})
 
-    # 名称映射
-    name_map = {c: insider_by[c].get("name") or c for c in intersect}
-    for r in reports:
-        if r["code"] in name_map and r.get("name"):
-            name_map[r["code"]] = r["name"]
-
-    if exclude_st:
-        intersect = [c for c in intersect if not is_st_name(name_map.get(c, ""))]
-
-    # 3) 现价
-    quotes = await _fetch_prices(intersect) if intersect else {}
+    # 2) 现价（先给研报代码报价，便于上行过滤）
+    quotes = await _fetch_prices(report_codes) if report_codes else {}
     price_by = {
         c: float(q["price"])
         for c, q in quotes.items()
         if q.get("price") is not None and float(q["price"]) > 0
     }
-
     research_by = eastmoney_reports.aggregate_targets_by_code(
         reports, price_by_code=price_by, min_upside=min_upside
     )
-    # 再次交集：有增持且上行达标
-    candidates = sorted(set(intersect) & set(research_by.keys()))
+    upside_codes = sorted(research_by.keys())
 
-    # 4) 日K + 估值（东财失败时新浪回退）
+    # 3) 高管增持 + 对上行候选查公告（回购/大股东增持）
+    insider_events = await eastmoney_insider.fetch_executive_increases(
+        days=days, page_size=insider_ps, max_pages=40
+    )
+    insider_by_all = eastmoney_insider.aggregate_insider_by_code(insider_events)
+    insider_by = {c: insider_by_all[c] for c in upside_codes if c in insider_by_all}
+    # 对上行候选查公告（回购/大股东增持）；与高管增持取并集
+    ann_by = await eastmoney_ann_signals.fetch_ann_signals_for_codes(
+        upside_codes, days=days, concurrency=12
+    )
+    ownership_by = eastmoney_ann_signals.merge_ownership(insider_by, ann_by)
+
+    # 4) 交集：上行达标 ∩ 所有权信号
+    candidates = sorted(set(upside_codes) & set(ownership_by.keys()))
+    name_map = {
+        c: (ownership_by.get(c) or {}).get("name")
+        or (research_by.get(c) or {}).get("name")
+        or c
+        for c in candidates
+    }
+    for c, q in quotes.items():
+        if q.get("name"):
+            name_map[c] = str(q["name"])
+
+    if exclude_st:
+        candidates = [c for c in candidates if not is_st_name(name_map.get(c, ""))]
+
+    # 5) 基本面估值
+    fund_by = await eastmoney_fundamentals.fetch_fundamentals_map(
+        candidates, concurrency=10
+    )
+
+    # 6) 日K（动量/风险辅助，不再作硬门槛）
     bar_stats: dict[str, Any] = {}
     if force_bars and candidates:
         bar_stats = await _refresh_candidate_bars(
@@ -127,7 +146,6 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
         bars = store.list_bars(code, limit=400)
         q = quotes.get(code) or {}
         name = str(q.get("name") or name_map.get(code) or code)
-        # 报价仍缺时，用日K最新收盘
         price = q.get("price")
         if price is None and bars and bars[-1].get("close") is not None:
             price = float(bars[-1]["close"])
@@ -138,11 +156,11 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
             price=price,
             change_pct=q.get("change_pct"),
             bars=bars,
-            insider=insider_by.get(code),
+            ownership=ownership_by.get(code),
             research=research_by.get(code),
+            fundamentals=fund_by.get(code),
             cfg=cfg,
         )
-        # 有了现价后复核上行空间（研报聚合阶段可能无价）
         res = row.get("research") or {}
         upside = res.get("upside")
         if upside is None and price and res.get("target_median"):
@@ -152,7 +170,10 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
             row["research"] = res
             row["checks"]["research_upside"] = {
                 "ok": upside >= min_upside,
-                "detail": f"目标价中枢 {res.get('target_median')}，上行 {upside*100:.1f}%（≥{min_upside*100:.0f}%）",
+                "detail": (
+                    f"目标价中枢 {res.get('target_median')}（{res.get('target_source')}），"
+                    f"上行 {upside*100:.1f}%（≥{min_upside*100:.0f}%）"
+                ),
             }
             row["passed"] = all(c["ok"] for c in row["checks"].values())
         if upside is not None and upside < min_upside:
@@ -165,6 +186,7 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
                     "code": code,
                     "name": name,
                     "checks": row["checks"],
+                    "valuation_score": (row.get("valuation") or {}).get("valuation_score"),
                     "price_percentile": (row.get("valuation") or {}).get("price_percentile"),
                 }
             )
@@ -172,7 +194,6 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
     analyzed.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
     pool = analyzed[:pool_size]
 
-    # 列表精简字段
     pool_list = []
     for r in pool:
         res = r.get("research") or {}
@@ -186,11 +207,19 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
                 "change_pct": r.get("change_pct"),
                 "score": r.get("score"),
                 "signal": r.get("signal"),
+                "valuation_score": val.get("valuation_score"),
+                "pe_ttm": val.get("pe_ttm"),
+                "pb_mrq": val.get("pb_mrq"),
+                "profit_yoy": val.get("profit_yoy"),
+                "peg": val.get("peg"),
                 "price_percentile": val.get("price_percentile"),
                 "target_median": res.get("target_median"),
+                "target_source": res.get("target_source"),
                 "upside": res.get("upside"),
+                "ownership_sources": ins.get("sources"),
                 "insider_events": ins.get("event_count"),
-                "insider_amount": ins.get("total_amount"),
+                "has_buyback": ins.get("has_buyback"),
+                "has_holder_increase": ins.get("has_holder_increase"),
                 "report_count": res.get("report_count"),
                 "org_count": res.get("org_count"),
             }
@@ -201,22 +230,26 @@ async def run_stock_screen(*, force_bars: bool = True) -> dict[str, Any]:
         "cfg": {
             "insider_days": days,
             "min_upside": min_upside,
-            "max_price_percentile": max_pct,
+            "min_valuation_score": min_val,
             "pool_size": pool_size,
         },
         "stats": {
             "insider_events": len(insider_events),
-            "insider_codes": len(insider_by),
+            "insider_codes_all": len(insider_by_all),
+            "insider_in_upside": len(insider_by),
+            "ann_codes": len(ann_by),
+            "ownership_codes": len(ownership_by),
             "reports_with_target": len(reports),
-            "intersect_before_price": len(intersect),
             "upside_pass": len(research_by),
+            "candidates": len(candidates),
             "valuation_pass": len(analyzed),
             "pool_n": len(pool),
-            "rejected_valuation": len(rejected),
+            "rejected": len(rejected),
             "bars": bar_stats,
         },
         "pool": pool_list,
         "details": {r["code"]: r for r in pool},
+        "rejected_sample": rejected[:40],
         "disclosure": cfg.get("disclosure"),
         "data_policy": "public_only",
     }

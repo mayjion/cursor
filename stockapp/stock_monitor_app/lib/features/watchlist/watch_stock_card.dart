@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/position_signal.dart';
 import '../../core/models/position_signal_record.dart';
+import '../../core/models/watch_stock.dart';
 import '../../core/providers/investment_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
@@ -11,16 +12,17 @@ import '../../core/settings/app_theme.dart';
 class WatchStockCard extends ConsumerWidget {
   const WatchStockCard({
     super.key,
-    required this.code,
-    required this.name,
+    required this.stock,
     required this.onTap,
     required this.onDelete,
   });
 
-  final String code;
-  final String name;
+  final WatchStock stock;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+
+  String get code => stock.code;
+  String get name => stock.name;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -119,6 +121,31 @@ class WatchStockCard extends ConsumerWidget {
                 _PriceLine(
                   price: flow!.closePrice!,
                   changePercent: flow.changePercent,
+                ),
+              ] else if (stock.price != null) ...[
+                const SizedBox(height: 4),
+                _PriceLine(
+                  price: stock.price!,
+                  changePercent: stock.changePct,
+                ),
+              ],
+              if (stock.returnPct != null || stock.addPrice != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    if (stock.addPrice != null)
+                      '${strings.isZh ? '加入' : 'Add'} ${stock.addPrice!.toStringAsFixed(2)}',
+                    if (stock.returnPct != null)
+                      '${strings.isZh ? '收益' : 'Ret'} ${stock.returnPct! >= 0 ? '+' : ''}${(stock.returnPct! * 100).toStringAsFixed(2)}%',
+                  ].join(' · '),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: stock.returnPct == null
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : (stock.returnPct! >= 0
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.error),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ],
               const SizedBox(height: 6),

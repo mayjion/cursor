@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
+from app.auth import verify_app_password
 from app.config import SETTINGS, reload_configs
 from app.services import dashboard as dash
 from app.services import stock_screen as stock_svc
@@ -13,7 +14,28 @@ router = APIRouter(prefix="/api")
 async def health() -> dict:
     from app.discovery.beacon import health_payload
 
-    return health_payload()
+    payload = health_payload()
+    payload["auth_required"] = True
+    return payload
+
+
+@router.post("/auth")
+async def api_auth(
+    request: Request,
+    x_app_password: str | None = Header(default=None),
+) -> dict:
+    password = x_app_password or ""
+    try:
+        data = await request.json()
+        if isinstance(data, dict):
+            raw = data.get("password")
+            if raw is not None and str(raw).strip():
+                password = str(raw).strip()
+    except Exception:  # noqa: BLE001
+        pass
+    if not verify_app_password(password):
+        raise HTTPException(status_code=401, detail="invalid app password")
+    return {"ok": True, "authenticated": True}
 
 
 @router.get("/universe")
@@ -77,6 +99,77 @@ async def api_stock_detail(code: str) -> dict:
     if detail is None:
         raise HTTPException(status_code=404, detail="stock not in recommended pool")
     return detail
+
+
+@router.get("/watchlist")
+async def api_watchlist(refresh: bool = Query(True)) -> dict:
+    from app.services import watchlist as wl
+
+    return await wl.list_watchlist(with_quotes=refresh)
+
+
+@router.post("/watchlist")
+async def api_watchlist_add(request: Request) -> dict:
+    from app.services import watchlist as wl
+
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="invalid json") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid body")
+    code = str(body.get("code") or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="code required")
+    try:
+        return await wl.add_watchlist_item(
+            code=code,
+            name=body.get("name"),
+            market=body.get("market"),
+            asset_type=body.get("asset_type"),
+            index_name=str(body.get("index_name") or ""),
+            note=str(body.get("note") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/watchlist/batch")
+async def api_watchlist_batch(request: Request) -> dict:
+    from app.services import watchlist as wl
+
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="invalid json") from exc
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="items list required")
+    return await wl.add_watchlist_batch(items)
+
+
+@router.delete("/watchlist/{code}")
+async def api_watchlist_delete(code: str) -> dict:
+    from app.services import watchlist as wl
+
+    result = wl.remove_watchlist_item(code)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail="not in watchlist")
+    return result
+
+
+@router.post("/watchlist/delete")
+async def api_watchlist_delete_batch(request: Request) -> dict:
+    from app.services import watchlist as wl
+
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="invalid json") from exc
+    codes = body.get("codes") if isinstance(body, dict) else None
+    if not isinstance(codes, list):
+        raise HTTPException(status_code=400, detail="codes list required")
+    return wl.remove_watchlist_batch([str(c) for c in codes])
 
 
 @router.post("/admin/stock-screen")

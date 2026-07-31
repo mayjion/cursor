@@ -15,7 +15,7 @@ def _empty_pool() -> dict[str, Any]:
         "cfg": {
             "insider_days": cfg.get("insider_days"),
             "min_upside": cfg.get("min_upside"),
-            "max_price_percentile": cfg.get("max_price_percentile"),
+            "min_valuation_score": cfg.get("min_valuation_score"),
             "pool_size": cfg.get("pool_size"),
         },
         "stats": {},

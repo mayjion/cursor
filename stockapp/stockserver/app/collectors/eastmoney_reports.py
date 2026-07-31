@@ -1,4 +1,5 @@
-"""东财公开研报列表：个股目标价（indvAimPriceT/L）。"""
+"""东财公开研报列表：显式目标价 + EPS×PE 隐含目标价。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,13 +36,31 @@ def _day(raw: Any) -> str | None:
     return s if len(s) >= 10 else None
 
 
+def _implied_from_predict(row: dict[str, Any]) -> float | None:
+    """用一致预期 EPS×PE 推隐含目标价。"""
+    pairs = [
+        (_f(row.get("predictThisYearEps")), _f(row.get("predictThisYearPe"))),
+        (_f(row.get("predictNextYearEps")), _f(row.get("predictNextYearPe"))),
+    ]
+    values: list[float] = []
+    for eps, pe in pairs:
+        if eps is None or pe is None:
+            continue
+        px = eps * pe
+        if 0.5 <= px <= 5000:
+            values.append(px)
+    if not values:
+        return None
+    return statistics.median(values)
+
+
 async def fetch_reports_with_targets(
     *,
     days: int = 90,
     page_size: int = 100,
     max_pages: int = 40,
 ) -> list[dict[str, Any]]:
-    """近 N 日带有效目标价的个股研报。"""
+    """近 N 日带显式目标价或可隐含目标价的个股研报。"""
     begin = (date.today() - timedelta(days=days)).isoformat()
     end = date.today().isoformat()
     gap = float(SETTINGS.get("request_gap_ms", 120)) / 1000.0
@@ -93,8 +112,11 @@ async def fetch_reports_with_targets(
                 aim_t = _f(row.get("indvAimPriceT"))
                 aim_l = _f(row.get("indvAimPriceL"))
                 aim = aim_t or aim_l
-                if aim is None:
+                implied = _implied_from_predict(row)
+                if aim is None and implied is None:
                     continue
+                source = "aim" if aim is not None else "implied"
+                price = aim if aim is not None else implied
                 out.append(
                     {
                         "code": code,
@@ -105,6 +127,13 @@ async def fetch_reports_with_targets(
                         "aim_price": aim,
                         "aim_price_t": aim_t,
                         "aim_price_l": aim_l,
+                        "implied_price": implied,
+                        "target_price": price,
+                        "target_source": source,
+                        "predict_this_eps": _f(row.get("predictThisYearEps")),
+                        "predict_this_pe": _f(row.get("predictThisYearPe")),
+                        "predict_next_eps": _f(row.get("predictNextYearEps")),
+                        "predict_next_pe": _f(row.get("predictNextYearPe")),
                         "rating": str(row.get("emRatingName") or row.get("sRatingName") or ""),
                         "info_code": str(row.get("infoCode") or ""),
                     }
@@ -122,18 +151,32 @@ def aggregate_targets_by_code(
     price_by_code: dict[str, float] | None = None,
     min_upside: float = 0.30,
 ) -> dict[str, dict[str, Any]]:
-    """按股票聚合目标价；若提供现价则只保留上行空间达标者。"""
+    """按股票聚合目标价（显式优先，否则隐含）；若提供现价则只保留上行达标者。"""
     by: dict[str, list[dict[str, Any]]] = {}
     for r in reports:
         by.setdefault(r["code"], []).append(r)
 
     out: dict[str, dict[str, Any]] = {}
     for code, rows in by.items():
-        aims = [float(r["aim_price"]) for r in rows if r.get("aim_price")]
-        if not aims:
-            continue
-        med = statistics.median(aims)
         latest = sorted(rows, key=lambda x: x.get("publish_date") or "", reverse=True)[0]
+        aim_prices = [float(r["aim_price"]) for r in rows if r.get("aim_price")]
+        if aim_prices:
+            # 显式目标价：用全样本中位数（更稳健）
+            targets = aim_prices
+            source = "aim"
+            med = statistics.median(targets)
+        else:
+            # 隐含目标价：旧报告 predict 字段噪声大，取最近一份
+            implied_recent = [
+                float(r["implied_price"])
+                for r in sorted(rows, key=lambda x: x.get("publish_date") or "", reverse=True)
+                if r.get("implied_price")
+            ]
+            if not implied_recent:
+                continue
+            targets = implied_recent
+            source = "implied"
+            med = float(implied_recent[0])
         price = (price_by_code or {}).get(code)
         upside = None
         if price and price > 0:
@@ -141,14 +184,16 @@ def aggregate_targets_by_code(
             if upside < min_upside:
                 continue
         orgs = sorted({str(r.get("org") or "") for r in rows if r.get("org")})
+        latest_target = latest.get("aim_price") or latest.get("implied_price") or med
         out[code] = {
             "code": code,
             "name": latest.get("name") or code,
             "target_median": round(med, 4),
-            "target_mean": round(statistics.mean(aims), 4),
-            "target_min": round(min(aims), 4),
-            "target_max": round(max(aims), 4),
-            "target_latest": float(latest["aim_price"]),
+            "target_mean": round(statistics.mean(targets), 4),
+            "target_min": round(min(targets), 4),
+            "target_max": round(max(targets), 4),
+            "target_latest": float(latest_target),
+            "target_source": source,
             "report_count": len(rows),
             "org_count": len(orgs),
             "orgs": orgs[:12],

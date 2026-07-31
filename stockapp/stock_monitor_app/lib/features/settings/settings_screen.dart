@@ -178,16 +178,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<String?> _askPassword() async {
+    if (!mounted) return null;
+    final strings = ref.read(appStringsProvider);
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ServerPasswordDialog(strings: strings),
+    );
+    if (result == null || result.isEmpty) return null;
+    return result;
+  }
+
+  Future<bool> _ensurePasswordAndConnect() async {
+    final strings = ref.read(appStringsProvider);
+    final conn = ref.read(serverConnectionProvider.notifier);
+    final settings = ref.read(appSettingsProvider);
+
+    Future<void> toast(bool ok) async {
+      if (!mounted) return;
+      final s = ref.read(appSettingsProvider);
+      final connState = ref.read(serverConnectionProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? '${strings.serverConnected}: ${s.serverHost}:${s.serverPort}'
+                : (connState.message.isNotEmpty
+                    ? connState.message
+                    : strings.serverPasswordWrong),
+          ),
+        ),
+      );
+    }
+
+    if (settings.hasServerPassword) {
+      final ok = await conn.check();
+      if (ok) {
+        await toast(true);
+        return true;
+      }
+      if (!ref.read(serverConnectionProvider).needsPassword) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ref.read(serverConnectionProvider).message),
+            ),
+          );
+        }
+        return false;
+      }
+    }
+    final pwd = await _askPassword();
+    if (pwd == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.serverPasswordNeeded)),
+        );
+      }
+      return false;
+    }
+    final ok = await conn.connectWithPassword(pwd);
+    await toast(ok);
+    return ok;
+  }
+
   Future<void> _applyServer(DiscoveredServer s) async {
     _hostCtrl.text = s.host;
     _portCtrl.text = '${s.port}';
     final notifier = ref.read(appSettingsProvider.notifier);
     await notifier.setServerEndpoint(s.host, s.port);
-    await ref.read(serverConnectionProvider.notifier).check();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${ref.read(appStringsProvider).serverConnected}: ${s.host}:${s.port}')),
-    );
+    await _ensurePasswordAndConnect();
   }
 
   Future<void> _saveAndTest() async {
@@ -196,24 +258,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final host = _hostCtrl.text.trim();
     final port = _parsePort();
     _portCtrl.text = '$port';
+    if (host.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.serverHostHint)),
+      );
+      return;
+    }
     setState(() => _testing = true);
     try {
       final notifier = ref.read(appSettingsProvider.notifier);
-      await notifier.setServerHost(host);
-      await notifier.setServerPort(port);
-      await notifier.setServerEnabled(true);
+      await notifier.setServerEndpoint(host, port);
       final hit = await LanDiscovery.checkHost(host, port: port);
-      await ref.read(serverConnectionProvider.notifier).check();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            hit != null
-                ? '${strings.serverConnected}: ${hit.host}:${hit.port}'
-                : strings.serverDisconnected,
-          ),
-        ),
-      );
+      if (hit == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.serverDisconnected)),
+        );
+        return;
+      }
+      await _ensurePasswordAndConnect();
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -285,6 +348,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
           ),
+          if (conn.needsPassword || !settings.hasServerPassword)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: OutlinedButton.icon(
+                onPressed: _testing
+                    ? null
+                    : () async {
+                        setState(() => _testing = true);
+                        try {
+                          await _ensurePasswordAndConnect();
+                        } finally {
+                          if (mounted) setState(() => _testing = false);
+                        }
+                      },
+                icon: const Icon(Icons.lock_outline),
+                label: Text(strings.serverPasswordTitle),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                strings.isZh ? '连接密码已保存' : 'Password saved on device',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
@@ -564,6 +653,86 @@ class _HistoryPerformanceSection extends ConsumerWidget {
               }).toList(),
             );
           },
+        ),
+      ],
+    );
+  }
+}
+
+/// 密码框自管 controller，避免弹窗关闭动画期间 dispose 导致输入崩溃。
+class _ServerPasswordDialog extends StatefulWidget {
+  const _ServerPasswordDialog({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  State<_ServerPasswordDialog> createState() => _ServerPasswordDialogState();
+}
+
+class _ServerPasswordDialogState extends State<_ServerPasswordDialog> {
+  late final TextEditingController _ctrl;
+  bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final v = _ctrl.text.trim();
+    if (v.isEmpty) return;
+    Navigator.of(context).pop(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = widget.strings;
+    return AlertDialog(
+      title: Text(strings.serverPasswordTitle),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(strings.serverPasswordMessage),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ctrl,
+              obscureText: _obscure,
+              autofocus: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.visiblePassword,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: strings.serverPasswordLabel,
+                hintText: strings.serverPasswordHint,
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.isZh ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(strings.isZh ? '确认' : 'OK'),
         ),
       ],
     );
