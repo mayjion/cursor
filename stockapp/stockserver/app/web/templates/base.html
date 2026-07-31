@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}星沉观察 · stockserver{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a href="/">星沉观察</a></div>
+    <nav>
+      <a href="/">仪表盘</a>
+      <a href="/stocks">股票池</a>
+      <a href="/alerts">预警</a>
+      <a href="/api/timing">择时API</a>
+      <a href="/?refresh=1">强制刷新</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot">
+    <p>{{ data.disclaimer if data is defined and data.disclaimer else "本服务仅供个人研究学习，使用公开行情接口，不构成投资建议。" }}</p>
+    <p>数据策略：零付费 · 点位回测门控 · 择时加/减仓提示</p>
+  </footer>
+</body>
+</html>

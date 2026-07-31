@@ -1,0 +1,28 @@
+[project]
+name = "stockserver"
+version = "0.1.0"
+description = "投资观察后台：公开数据 + Web 仪表盘（零付费数据源）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "httpx>=0.27.0",
+  "jinja2>=3.1.4",
+  "pyyaml>=6.0.2",
+  "pydantic>=2.9.0",
+  "pydantic-settings>=2.6.0",
+  "apscheduler>=3.10.4",
+  "python-multipart>=0.0.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

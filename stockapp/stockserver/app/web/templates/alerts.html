@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}预警 · 星沉观察{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>预警中心</h1>
+    <p class="muted">Phase {{ data.phase }} · 共 {{ data.count }} 条 · {{ data.updated_at or "—" }}</p>
+    <p class="tiny">规则：单日涨跌≥5%、净申购突发+短线大涨、评分连降、极弱评分；另含 events.yaml 手工事件。</p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/">返回仪表盘</a>
+    <a class="btn" href="/alerts?refresh=1">重新评估</a>
+  </div>
+</section>
+
+<section>
+  {% if data.alerts %}
+  <ul class="alert-list">
+    {% for a in data.alerts %}
+    <li class="alert alert-{{ a.type }}">
+      <div class="card-top">
+        <strong>{{ a.title }}</strong>
+        <span class="lamp">{{ a.type }}</span>
+      </div>
+      <p class="tiny">{{ a.detail }}</p>
+      <p class="tiny">
+        {% if a.code %}<a href="/etf/{{ a.code }}">{{ a.code }}</a> · {% endif %}
+        {{ a.source }}{% if a.date %} · {{ a.date }}{% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">暂无预警。</p>
+  {% endif %}
+</section>
+{% endblock %}

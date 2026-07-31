@@ -1,0 +1,26 @@
+# A股初选与推荐池（公开数据，零付费）
+version: 1
+
+insider_days: 90
+min_upside: 0.30
+max_price_percentile: 0.35
+price_lookback: 250
+pool_size: 30
+exclude_st: true
+
+# 综合评分权重（归一化）
+weights:
+  undervalue: 0.30
+  upside: 0.25
+  insider: 0.20
+  research: 0.15
+  risk: 0.10
+
+# 研报分页上限（防超时）
+report_max_pages: 40
+report_page_size: 100
+insider_page_size: 500
+
+disclosure: >
+  研报目标价为卖方观点且覆盖不全；一年价格分位为估值代理，非绝对低估。
+  仅供个人研究，不构成投资建议。

@@ -3,8 +3,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:workmanager/workmanager.dart';
 
 import 'app_router.dart';
+import 'core/background/foreground_scan.dart';
+import 'core/background/scan_scheduler.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/settings/app_theme.dart';
@@ -13,6 +16,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await NotificationService.instance.initialize();
+  await ForegroundScanNotifier.init();
+  await Workmanager().initialize(scanCallbackDispatcher);
+  await ScanScheduler.syncFromPrefs();
   await _requestNotificationPermission();
   runApp(const ProviderScope(child: StockMonitorApp()));
 }
@@ -50,11 +56,20 @@ class _StockMonitorAppState extends ConsumerState<StockMonitorApp> {
         NotificationService.instance
             .scheduleCloseReminder(enabled: next.notifyEnabled);
       }
+      if (prev?.nightScanEnabled != next.nightScanEnabled ||
+          prev?.scanHour != next.scanHour ||
+          prev?.scanMinute != next.scanMinute) {
+        if (next.nightScanEnabled) {
+          ScanScheduler.scheduleNext();
+        } else {
+          ScanScheduler.cancel();
+        }
+      }
     });
 
     final settings = ref.watch(appSettingsProvider);
     return MaterialApp.router(
-      title: '自选股监控',
+      title: '星沉大海',
       theme: appThemeForIndex(settings.themeIndex),
       locale: settings.locale,
       supportedLocales: const [Locale('zh'), Locale('en')],

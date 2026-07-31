@@ -1,0 +1,1 @@
+"""stockserver application package."""

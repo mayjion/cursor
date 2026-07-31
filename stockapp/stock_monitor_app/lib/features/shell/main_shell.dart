@@ -10,7 +10,7 @@ class MainShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   static bool _hideBottomBar(String path) {
-    return path.startsWith('/stock/');
+    return path.contains('/stock/') || path.contains('/etf/');
   }
 
   @override
@@ -32,23 +32,39 @@ class MainShell extends ConsumerWidget {
                     context.go('/');
                     break;
                   case 1:
-                    context.go('/stats');
+                    context.go('/insights');
                     break;
                   case 2:
+                    context.go('/overview');
+                    break;
+                  case 3:
+                    context.go('/watchlist');
+                    break;
+                  case 4:
                     context.go('/settings');
                     break;
                 }
               },
               destinations: [
                 NavigationDestination(
+                  icon: const Icon(Icons.trending_down_outlined),
+                  selectedIcon: const Icon(Icons.trending_down),
+                  label: strings.navRecommendations,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.newspaper_outlined),
+                  selectedIcon: const Icon(Icons.newspaper),
+                  label: strings.navInsights,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.pie_chart_outline),
+                  selectedIcon: const Icon(Icons.pie_chart),
+                  label: strings.navOverview,
+                ),
+                NavigationDestination(
                   icon: const Icon(Icons.star_outline),
                   selectedIcon: const Icon(Icons.star),
                   label: strings.navWatchlist,
-                ),
-                NavigationDestination(
-                  icon: const Icon(Icons.analytics_outlined),
-                  selectedIcon: const Icon(Icons.analytics),
-                  label: strings.navStats,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),

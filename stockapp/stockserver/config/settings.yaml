@@ -1,0 +1,8 @@
+host: "0.0.0.0"
+port: 8787
+# App 局域网自动发现用 UDP 广播端口
+discovery_port: 48787
+request_gap_ms: 120
+snapshot_cache_ttl_sec: 300
+db_path: "data/stockserver.db"
+disclaimer: "本服务仅供个人研究学习，使用公开行情接口，不构成投资建议。"

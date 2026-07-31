@@ -1,36 +1,40 @@
-# 自选股加减仓信号 (stock_monitor_app)
+# 星沉大海 (stock_monitor_app)
 
-基于 Flutter 的 Android 自选股应用：监控东方财富资金流向与 K 线数据，基于 30 日量价规则生成加减仓信号，并在趋势逆转为左侧下跌时高优先级提醒。
+基于 Flutter 的 Android 投资分析应用：可对接局域网 **stockserver** 推荐池，也可在无服务端时本地扫描。
 
 ## 功能
 
-- 添加/管理自选股
-- 下拉刷新拉取近 6 个月 OHLCV + 资金流
-- **30 日加减仓信号**：加仓 / 减仓 / 持有 / 只持底仓
-- **趋势逆转提醒**：早期预警 / 确认反转 / 深跌保护（共振评分）
-- 信号历史与分布统计
-- 个股详情：30 日分析卡、共振信号、ATR 止损参考、资金流图表
-- 交易日 15:05 本地收盘提醒
-- 趋势逆转高优先级本地推送（可设置开关）
+- **服务端对接**：同一 Wi‑Fi 下自动搜索 stockserver；也可手动填写电脑 IP（端口默认 **8787**）
+- **今日推荐**：已连接服务端时展示服务端 A 股初选池；未连接时可本地扫描
+- **夜间扫描**：设置页开启定时任务（默认 02:00，仅工作日），或手动「立即扫描」
+- **资讯洞察 / 自选股 / 个股详情**：沿用本地能力
 
 ## 运行
 
 ```bash
+# 电脑端服务
+cd ../stockserver && ./scripts/run.sh
+
+# 手机 App
 cd stock_monitor_app
 flutter pub get
-flutter test
 flutter run
 ```
 
+## 使用说明
+
+1. 电脑启动 stockserver（默认 `http://0.0.0.0:8787`）
+2. 手机与电脑连同一 Wi‑Fi → **设置 → 搜索局域网** → 选中服务端
+3. 不在同一局域网：在设置里填写电脑 IP，端口保持 **8787**，点「保存并连接」
+4. 连接成功后，「推荐」Tab 显示服务端股票池；未连接时仍可用本地扫描
+
 ## 架构
 
-`Riverpod` + `go_router` + `Hive` + `features/core` 分层。
-
-核心模块：
-- `lib/core/position/position_signal_analyzer.dart` — 30 日加减规则
-- `lib/core/position/downtrend_detector.dart` — 左侧下跌共振检测
-- `lib/core/position/technical_indicators.dart` — MA/RSI/ADX/MACD/ATR
+- Flutter: `Riverpod` + `go_router` + `Hive`
+- 本地引擎: `lib/core/engine/`（评分 + 扫描编排）
+- 数据源: 东方财富公开 API（`EastmoneyClient`）
+- 后台: `workmanager`（定时）+ `flutter_foreground_task`（扫描保活）
 
 ## 免责声明
 
-数据来源于东方财富公开接口，加减仓信号仅供个人记录与参考，不构成任何投资建议。
+数据来源于东方财富公开接口，本地扫描与加减仓信号仅供个人记录与参考，不构成任何投资建议。

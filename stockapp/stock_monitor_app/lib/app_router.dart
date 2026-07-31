@@ -1,8 +1,11 @@
 import 'package:go_router/go_router.dart';
 
+import 'features/etf_detail/etf_detail_screen.dart';
+import 'features/etf_overview/etf_overview_screen.dart';
+import 'features/insights/insights_screen.dart';
+import 'features/recommendations/recommendations_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/main_shell.dart';
-import 'features/stats/stats_screen.dart';
 import 'features/stock_detail/stock_detail_screen.dart';
 import 'features/watchlist/watchlist_screen.dart';
 
@@ -17,7 +20,7 @@ final goRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/',
-              builder: (context, state) => const WatchlistScreen(),
+              builder: (context, state) => const RecommendationsScreen(),
               routes: [
                 GoRoute(
                   path: 'stock/:code',
@@ -31,11 +34,63 @@ final goRouter = GoRouter(
           ],
         ),
         StatefulShellBranch(
-          initialLocation: '/stats',
+          initialLocation: '/insights',
           routes: [
             GoRoute(
-              path: '/stats',
-              builder: (context, state) => const StatsScreen(),
+              path: '/insights',
+              builder: (context, state) => const InsightsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'stock/:code',
+                  builder: (context, state) {
+                    final code = state.pathParameters['code']!;
+                    return StockDetailScreen(code: code);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          initialLocation: '/overview',
+          routes: [
+            GoRoute(
+              path: '/overview',
+              builder: (context, state) => const EtfOverviewScreen(),
+              routes: [
+                GoRoute(
+                  path: 'etf/:code',
+                  builder: (context, state) {
+                    final code = state.pathParameters['code']!;
+                    return EtfDetailScreen(code: code);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          initialLocation: '/watchlist',
+          routes: [
+            GoRoute(
+              path: '/watchlist',
+              builder: (context, state) => const WatchlistScreen(),
+              routes: [
+                GoRoute(
+                  path: 'stock/:code',
+                  builder: (context, state) {
+                    final code = state.pathParameters['code']!;
+                    return StockDetailScreen(code: code);
+                  },
+                ),
+                GoRoute(
+                  path: 'etf/:code',
+                  builder: (context, state) {
+                    final code = state.pathParameters['code']!;
+                    return EtfDetailScreen(code: code);
+                  },
+                ),
+              ],
             ),
           ],
         ),

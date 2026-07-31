@@ -12,12 +12,15 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static const int closeReminderId = 1001;
+  static const int recommendationReminderId = 1002;
   static const String channelId = 'stock_close_reminder';
   static const String channelName = '收盘提醒';
   static const String reversalChannelId = 'stock_reversal_alert';
   static const String reversalChannelName = '趋势逆转提醒';
   static const String signalChannelId = 'stock_signal_change';
   static const String signalChannelName = '加减仓信号';
+  static const String recommendationChannelId = 'stock_recommendation';
+  static const String recommendationChannelName = '低估推荐';
 
   bool _initialized = false;
   int _nextAlertId = 2000;
@@ -65,6 +68,14 @@ class NotificationService {
         importance: Importance.defaultImportance,
       ),
     );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        recommendationChannelId,
+        recommendationChannelName,
+        description: '每日低估推荐更新提醒',
+        importance: Importance.defaultImportance,
+      ),
+    );
 
     _initialized = true;
   }
@@ -91,7 +102,7 @@ class NotificationService {
       closeReminderId,
       '收盘提醒',
       '收盘了，请打开应用刷新自选股并查看加减仓信号',
-      _nextWeekdayAt1505(scheduled),
+      _nextWeekdayAt(scheduled, 15, 5),
       const NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,
@@ -103,6 +114,52 @@ class NotificationService {
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> scheduleRecommendationReminder({required bool enabled}) async {
+    await initialize();
+    await _plugin.cancel(recommendationReminderId);
+    if (!enabled) return;
+
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, 16, 0);
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+
+    await _plugin.zonedSchedule(
+      recommendationReminderId,
+      '今日推荐已更新',
+      '点击查看今日低估候选股与行业资讯',
+      _nextWeekdayAt(scheduled, 16, 0),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          recommendationChannelId,
+          recommendationChannelName,
+          channelDescription: '每日低估推荐更新',
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> showRecommendationUpdateAlert({required int count}) async {
+    await initialize();
+    await _plugin.show(
+      recommendationReminderId + 1,
+      '今日推荐已更新',
+      '共 $count 只低估候选股，点击查看详情',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          recommendationChannelId,
+          recommendationChannelName,
+          channelDescription: '每日低估推荐更新',
+        ),
+      ),
     );
   }
 
@@ -174,11 +231,11 @@ class NotificationService {
     );
   }
 
-  tz.TZDateTime _nextWeekdayAt1505(tz.TZDateTime from) {
+  tz.TZDateTime _nextWeekdayAt(tz.TZDateTime from, int hour, int minute) {
     var dt = from;
     while (dt.weekday == DateTime.saturday || dt.weekday == DateTime.sunday) {
       dt = dt.add(const Duration(days: 1));
-      dt = tz.TZDateTime(tz.local, dt.year, dt.month, dt.day, 15, 5);
+      dt = tz.TZDateTime(tz.local, dt.year, dt.month, dt.day, hour, minute);
     }
     return dt;
   }

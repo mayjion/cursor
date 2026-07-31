@@ -13,6 +13,12 @@ void main() {
       expect(EastmoneyClient.marketFromCode('300750'), 'sz');
     });
 
+    test('etf codes', () {
+      expect(EastmoneyClient.marketFromCode('510300'), 'sh');
+      expect(EastmoneyClient.isEtfCode('510300'), isTrue);
+      expect(EastmoneyClient.isEtfCode('600519'), isFalse);
+    });
+
     test('invalid code throws', () {
       expect(
         () => EastmoneyClient.marketFromCode('899999'),

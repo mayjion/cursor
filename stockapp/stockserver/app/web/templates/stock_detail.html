@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ stock.name }} · 股票分析{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{{ stock.name }} <span class="lamp signal-{{ stock.signal }}">{{ stock.score }}</span></h1>
+    <p class="muted">{{ stock.code }} · 综合评分 {{ stock.score }}</p>
+    <p class="chg {% if stock.change_pct is not none and stock.change_pct >= 0 %}up{% elif stock.change_pct is not none %}down{% endif %}">
+      现价 {% if stock.price is not none %}{{ '%.2f'|format(stock.price) }}{% else %}—{% endif %}
+      · 涨跌 {% if stock.change_pct is not none %}{{ '%+.2f'|format(stock.change_pct) }}%{% else %}—{% endif %}
+    </p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/stocks">返回股票池</a>
+  </div>
+</section>
+
+<section>
+  <h2>三条件验收</h2>
+  <table class="table">
+    <thead><tr><th>条件</th><th>结果</th><th>明细</th></tr></thead>
+    <tbody>
+      {% for key, c in stock.checks.items() %}
+      <tr>
+        <td>{{ key }}</td>
+        <td class="{% if c.ok %}up{% else %}down{% endif %}">{% if c.ok %}通过{% else %}未过{% endif %}</td>
+        <td class="tiny">{{ c.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>估值与量价</h2>
+  {% set v = stock.valuation or {} %}
+  <div class="ret-summary">
+    <div class="ret-pill"><span class="tiny">一年价格分位</span>
+      <strong>{% if v.price_percentile is not none %}{{ '%.0f'|format(v.price_percentile * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill"><span class="tiny">20日动量</span>
+      <strong>{% if v.mom20 is not none %}{{ '%+.1f'|format(v.mom20 * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill"><span class="tiny">60日动量</span>
+      <strong>{% if v.mom60 is not none %}{{ '%+.1f'|format(v.mom60 * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill"><span class="tiny">60日回撤</span>
+      <strong>{% if v.drawdown60 is not none %}{{ '%.1f'|format(v.drawdown60 * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill"><span class="tiny">年化波动</span>
+      <strong>{% if v.volatility is not none %}{{ '%.0f'|format(v.volatility * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+  </div>
+  <h3 class="subh">评分分项</h3>
+  <table class="table">
+    <thead><tr><th>分项</th><th>得分</th></tr></thead>
+    <tbody>
+      {% for k, val in (stock.score_parts or {}).items() %}
+      <tr><td>{{ k }}</td><td>{{ val }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>高管增持（可追溯）</h2>
+  {% if stock.insider %}
+  <p class="tiny">
+    近窗 {{ stock.insider.event_count }} 次 · 涉及 {{ stock.insider.person_count }} 人 ·
+    合计约 {% if stock.insider.total_amount %}{{ '%.0f'|format(stock.insider.total_amount) }}{% else %}—{% endif %} 元 ·
+    最近 {{ stock.insider.latest_date or '—' }}
+  </p>
+  <table class="table">
+    <thead><tr><th>日期</th><th>姓名</th><th>职务</th><th>股数</th><th>均价</th><th>原因</th></tr></thead>
+    <tbody>
+      {% for e in stock.insider.events or [] %}
+      <tr>
+        <td>{{ e.change_date }}</td>
+        <td>{{ e.person }}</td>
+        <td>{{ e.position }}</td>
+        <td>{{ '%.0f'|format(e.change_shares) }}</td>
+        <td>{% if e.average_price %}{{ '%.2f'|format(e.average_price) }}{% else %}—{% endif %}</td>
+        <td class="tiny">{{ e.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">无增持明细</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>研报目标价（可追溯）</h2>
+  {% set r = stock.research or {} %}
+  {% if r %}
+  <p class="tiny">
+    目标价中枢 {{ r.target_median }} · 最新 {{ r.target_latest }} ·
+    区间 {{ r.target_min }}–{{ r.target_max }} ·
+    上行 {% if r.upside is not none %}{{ '%.0f'|format(r.upside * 100) }}%{% else %}—{% endif %} ·
+    {{ r.report_count }} 篇 / {{ r.org_count }} 家机构
+  </p>
+  <table class="table">
+    <thead><tr><th>日期</th><th>机构</th><th>目标价</th><th>评级</th><th>标题</th></tr></thead>
+    <tbody>
+      {% for rep in r.reports or [] %}
+      <tr>
+        <td>{{ rep.publish_date }}</td>
+        <td>{{ rep.org }}</td>
+        <td>{{ '%.2f'|format(rep.aim_price) }}</td>
+        <td>{{ rep.rating or '—' }}</td>
+        <td class="tiny">{{ rep.title }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">无研报目标价</p>
+  {% endif %}
+  <p class="tiny">{{ stock.disclosure }}</p>
+</section>
+{% endblock %}

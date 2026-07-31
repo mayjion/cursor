@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/position_signal.dart';
 import '../../core/models/position_signal_record.dart';
+import '../../core/providers/investment_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/settings/app_theme.dart';
@@ -25,6 +26,8 @@ class WatchStockCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(appStringsProvider);
     final items = ref.watch(watchlistItemsProvider);
+    final recs = ref.watch(todayRecommendationsProvider).valueOrNull;
+    final isFromRec = recs?.items.any((r) => r.code == code) ?? false;
     final state = items.maybeWhen(
       data: (m) => m[code],
       orElse: () => null,
@@ -77,6 +80,20 @@ class WatchStockCard extends ConsumerWidget {
                                     .onSurfaceVariant,
                               ),
                         ),
+                        if (isFromRec)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Chip(
+                              label: Text(
+                                strings.isZh ? '今日推荐' : 'Today pick',
+                                style: const TextStyle(fontSize: 9),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
                       ],
                     ),
                   ),

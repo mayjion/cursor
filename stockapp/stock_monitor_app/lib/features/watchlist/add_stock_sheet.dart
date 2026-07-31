@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/eastmoney_client.dart';
 import '../../core/models/watch_stock.dart';
+import '../../core/providers/etf_providers.dart';
 import '../../core/providers/stock_providers.dart';
 import '../../core/settings/app_strings.dart';
 import '../../core/storage/watchlist_storage.dart';
@@ -17,6 +18,8 @@ class AddStockSheet extends ConsumerStatefulWidget {
 class _AddStockSheetState extends ConsumerState<AddStockSheet> {
   final _controller = TextEditingController();
   String? _previewName;
+  String? _indexName;
+  AssetType _assetType = AssetType.stock;
   String? _error;
   bool _loading = false;
 
@@ -43,9 +46,24 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
     });
     try {
       final client = ref.read(eastmoneyClientProvider);
+      final type = AssetType.fromCode(code);
+      if (type == AssetType.etf) {
+        final info = await client.fetchEtfInfo(code);
+        if (info != null) {
+          setState(() {
+            _previewName = info.name;
+            _indexName = info.indexName;
+            _assetType = AssetType.etf;
+            _loading = false;
+          });
+          return;
+        }
+      }
       final quote = await client.fetchStockQuote(code);
       setState(() {
         _previewName = quote.name;
+        _indexName = '';
+        _assetType = type;
         _loading = false;
       });
     } on EastmoneyException catch (e) {
@@ -72,9 +90,7 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
     final existing = await WatchlistStorage.getByCode(code);
     if (existing != null) {
       setState(() {
-        _error = ref.read(appStringsProvider).isZh
-            ? '已在自选列表中'
-            : 'Already in watchlist';
+        _error = ref.read(appStringsProvider).alreadyInWatchlist;
       });
       return;
     }
@@ -85,10 +101,22 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
       name: _previewName!,
       market: market,
       addedAt: DateTime.now(),
+      assetType: _assetType,
+      indexName: _indexName ?? '',
     );
     await WatchlistStorage.save(stock);
+    if (_assetType == AssetType.etf) {
+      try {
+        final score = await refreshEtfScoreWithClient(
+          ref.read(eastmoneyClientProvider),
+          code,
+        );
+        ref.read(etfScoreMapProvider.notifier).upsert(score);
+      } catch (_) {}
+    }
     ref.invalidate(watchlistProvider);
     ref.invalidate(watchlistItemsProvider);
+    ref.invalidate(etfWatchlistProvider);
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -110,12 +138,19 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
             strings.addStock,
             style: Theme.of(context).textTheme.titleLarge,
           ),
+          const SizedBox(height: 8),
+          Text(
+            strings.isZh
+                ? '支持 A 股与场内 ETF（如 510300）'
+                : 'Supports A-shares and ETFs',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _controller,
             decoration: InputDecoration(
               labelText: strings.stockCode,
-              hintText: strings.stockCodeHint,
+              hintText: strings.etfCodeHint,
               border: const OutlineInputBorder(),
               suffixIcon: _loading
                   ? const Padding(
@@ -143,7 +178,7 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _previewName!,
+                    '$_previewName${_assetType == AssetType.etf ? ' · ETF' : ''}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -152,7 +187,8 @@ class _AddStockSheetState extends ConsumerState<AddStockSheet> {
           ],
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
           const SizedBox(height: 20),
           FilledButton(

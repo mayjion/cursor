@@ -1,0 +1,49 @@
+# 择时规则 + 回测门控（决策日只用 as_of 及之前数据）
+version: 5
+
+# 先验默认：偏高胜率非对称退出（小止盈 + 宽止损）；最终以 walk-forward 为准
+add:
+  qoq_multiple_min: 2.0
+  max_price_percentile: 0.70
+  min_mom20: -0.08
+  min_mom60: -0.10
+  min_mom5: -1.0
+  max_mom20: 9.0
+  max_volatility: 9.0
+  min_drawdown60: -9.0
+  min_market_mom60: -9.0
+  require_market_regime: false
+  defensive_qoq_multiple_min: 2.5
+  defensive_max_price_percentile: 0.60
+
+reduce:
+  take_profit: 0.06
+  stop_loss: 0.25
+  max_hold_days: 90
+  time_stop_days: 0
+  time_stop_min_pnl: 0.0
+  use_overheat_exit: false
+  use_flow_fade_exit: false
+  overheat_percentile: 0.90
+  overheat_mom20: 0.10
+  flow_fade_max: 0.4
+
+backtest:
+  windows: [126, 252]
+  primary_window: 252
+  fill: close
+  min_trades: 8
+  min_win_rate: 0.80
+  # 扩大池后，80% 胜率档测试窗均收益峰值约 3.3%；取 2.5 留余量
+  min_avg_return: 2.5
+  win_return_min: 0.01
+  benchmark_code: "515080"
+  walk_forward: true
+  train_ratio: 0.6
+  train_top_n: 100
+
+disclosure: >
+  门控：胜率≥80%（单笔收益为正即计胜），平均收益≥2.5%。
+  扩大公开 ETF 训练池；训练窗定参（含 holdout）、测试窗验收；
+  规则偏好「小止盈+宽止损」以抬高胜率。未达标则不推加仓。
+  禁止未来函数。仅供个人研究，不构成投资建议。

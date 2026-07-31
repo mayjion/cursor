@@ -1,0 +1,159 @@
+# 10 高景气 + 3 稳健；因子 source 仅允许 public | proxy | stub（禁止 paid）
+version: 1
+hot:
+  - id: semiconductor
+    name: 半导体/芯片
+    primary: "588290"
+    alternates: ["588750"]
+    logic: AI算力+国产替代
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: mom60, name: 60日动量, source: public, weight: 0.15 }
+      - { id: volatility, name: 波动率, source: public, weight: 0.10 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: sox_proxy, name: 外盘半导体联动, source: proxy, weight: 0.10 }
+      - { id: policy_stub, name: 产业政策, source: stub, weight: 0.10 }
+
+  - id: ai
+    name: 人工智能
+    primary: "588730"
+    alternates: ["159279"]
+    logic: 大模型+算力+应用
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: mom60, name: 60日动量, source: public, weight: 0.15 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: nasdaq_proxy, name: 纳指科技联动, source: proxy, weight: 0.15 }
+      - { id: capex_stub, name: 云厂商开支, source: stub, weight: 0.15 }
+
+  - id: robot
+    name: 机器人
+    primary: "159770"
+    alternates: ["159039"]
+    logic: 人形机器人+工业自动化
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: mom60, name: 60日动量, source: public, weight: 0.15 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: pmi_proxy, name: 制造业景气代理, source: proxy, weight: 0.15 }
+      - { id: humanoid_stub, name: 量产进度, source: stub, weight: 0.25 }
+
+  - id: new_energy
+    name: 新能源/储能
+    primary: "159305"
+    alternates: ["588830"]
+    logic: 风光配储+海外储能
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: commodity_proxy, name: 锂/硅料价格代理, source: proxy, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: policy_stub, name: 海外补贴政策, source: stub, weight: 0.25 }
+
+  - id: innovative_drug
+    name: 创新药
+    primary: "159748"
+    alternates: ["159286"]
+    logic: 出海+医保缓和
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: xbi_proxy, name: 美股生科联动, source: proxy, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: bd_stub, name: 出海授权, source: stub, weight: 0.25 }
+
+  - id: cloud
+    name: 云计算/软件
+    primary: "159273"
+    alternates: ["159035"]
+    logic: 云开支+信创
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: us_cloud_proxy, name: 美股云巨头联动, source: proxy, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: xinchuang_stub, name: 信创招标, source: stub, weight: 0.20 }
+
+  - id: consumer_electronics
+    name: 消费电子
+    primary: "159779"
+    alternates: []
+    logic: AI终端换机
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: aapl_proxy, name: 苹果供应链联动, source: proxy, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: shipment_stub, name: 出货量, source: stub, weight: 0.20 }
+
+  - id: defense
+    name: 军工
+    primary: "512660"
+    alternates: ["512710"]
+    logic: 国防预算+装备现代化
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.25 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.20 }
+      - { id: geo_stub, name: 地缘风险, source: stub, weight: 0.30 }
+
+  - id: nonferrous
+    name: 有色金属
+    primary: "159329"
+    alternates: ["159032"]
+    logic: 新能源金属+通胀
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.15 }
+      - { id: lme_proxy, name: 铜铝价格代理, source: proxy, weight: 0.25 }
+      - { id: usd_proxy, name: 美元指数代理, source: proxy, weight: 0.15 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.10 }
+      - { id: inventory_stub, name: 库存, source: stub, weight: 0.15 }
+
+  - id: fintech
+    name: 金融科技
+    primary: "159299"
+    alternates: []
+    logic: 数字人民币+金融信创
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: flow_burst, name: 净申购突发, source: public, weight: 0.20 }
+      - { id: turnover_proxy, name: 市场成交活跃度, source: public, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.15 }
+      - { id: cbdc_stub, name: 数币进展, source: stub, weight: 0.20 }
+
+defensive:
+  - id: dividend_lowvol
+    name: 红利低波
+    primary: "515080"
+    alternates: ["159307"]
+    logic: 高股息压舱石
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.15 }
+      - { id: volatility, name: 波动率, source: public, weight: 0.25 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.25 }
+      - { id: bond_yield_proxy, name: 国债收益率代理, source: proxy, weight: 0.20 }
+      - { id: dividend_stub, name: 股息率, source: stub, weight: 0.15 }
+
+  - id: hs300
+    name: 沪深300
+    primary: "510300"
+    alternates: ["159300"]
+    logic: 宽基估值锚
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.20 }
+      - { id: pe_pct, name: PE百分位, source: public, weight: 0.35 }
+      - { id: pb_pct, name: PB百分位, source: public, weight: 0.25 }
+      - { id: northbound_proxy, name: 北向/活跃度代理, source: proxy, weight: 0.20 }
+
+  - id: bond_5y
+    name: 5年期国债ETF
+    primary: "511010"
+    alternates: []
+    logic: 利率与避险
+    factors:
+      - { id: mom20, name: 20日动量, source: public, weight: 0.25 }
+      - { id: bond_yield_proxy, name: 收益率走势, source: proxy, weight: 0.40 }
+      - { id: risk_off_stub, name: 避险情绪, source: stub, weight: 0.35 }

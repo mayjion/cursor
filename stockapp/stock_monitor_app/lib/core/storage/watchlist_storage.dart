@@ -18,6 +18,20 @@ class WatchlistStorage {
     await _box!.put(stock.id, jsonEncode(stock.toJson()));
   }
 
+  static Future<void> saveMany(Iterable<WatchStock> stocks) async {
+    await ensureOpen();
+    final map = <String, String>{
+      for (final s in stocks) s.id: jsonEncode(s.toJson()),
+    };
+    if (map.isNotEmpty) await _box!.putAll(map);
+  }
+
+  static Future<void> deleteMany(Iterable<String> ids) async {
+    await ensureOpen();
+    final list = ids.toList();
+    if (list.isNotEmpty) await _box!.deleteAll(list);
+  }
+
   static Future<void> delete(String id) async {
     await ensureOpen();
     await _box!.delete(id);

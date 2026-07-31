@@ -1,0 +1,15 @@
+# 重要公开事件 / 手工备注（零付费）
+# type: info | watch | risk
+events:
+  - date: "2026-07-01"
+    type: watch
+    title: "关注产业政策与财报季披露窗口"
+    detail: "无付费舆情源；请对照政府官网与公司公告人工核实。"
+    code: null
+    name: null
+  - date: "2026-07-15"
+    type: info
+    title: "外盘代理已启用东财美股公开日K"
+    detail: "SMH/QQQ/XBI/AAPL/云巨头/LIT/CPER/UUP/TLT/XLI 等（市场105）；失败时该因子自动跳过。"
+    code: null
+    name: null

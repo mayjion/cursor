@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ etf.name }} · 星沉观察{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{{ etf.name }}
+      {% if etf.timing and etf.timing.live %}
+      <span class="lamp">{{ etf.timing.live.action_label }}</span>
+      {% else %}
+      <span class="lamp signal-{{ etf.signal }}">{{ etf.signal_label }}</span>
+      {% endif %}
+    </h1>
+    <p class="muted">{{ etf.code }} · {{ etf.quote_name }} · 综合评分 {{ etf.score }}</p>
+    <p class="chg {% if etf.change_pct is not none and etf.change_pct >= 0 %}up{% elif etf.change_pct is not none %}down{% endif %}">
+      现价 {% if etf.price is not none %}{{ '%.3f'|format(etf.price) }}{% else %}—{% endif %}
+      · 涨跌 {% if etf.change_pct is not none %}{{ '%+.2f'|format(etf.change_pct) }}%{% else %}—{% endif %}
+    </p>
+    <p>{{ etf.logic }}</p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/">返回仪表盘</a>
+    <a class="btn" href="/etf/{{ etf.code }}?refresh=1">全量刷新本券</a>
+  </div>
+</section>
+
+{% if etf.timing %}
+<section>
+  <h2>择时检查表（点位 as_of={{ etf.timing.live.as_of if etf.timing.live else '—' }}）</h2>
+  <p class="tiny">
+    全池一年门控：{% if etf.timing.validated_pool %}已通过{% else %}未通过（加仓将被门控）{% endif %}
+    · 该票一年 {{ etf.timing.metrics.trades or 0 }} 笔
+    {% if etf.timing.metrics.win_rate is not none %}胜率 {{ '%.0f'|format(etf.timing.metrics.win_rate * 100) }}%{% endif %}
+    {% if etf.timing.metrics.avg_return is not none %}均收益 {{ '%+.2f'|format(etf.timing.metrics.avg_return) }}%{% endif %}
+  </p>
+  {% if etf.timing.live %}
+  <ul class="alert-list">
+    <li class="alert alert-info">
+      <strong>{{ etf.timing.live.action_label }}</strong>
+      {% for r in etf.timing.live.reasons %}
+      <p class="tiny">· {{ r }}</p>
+      {% endfor %}
+      {% for b in etf.timing.live.blockers %}
+      <p class="tiny">× {{ b }}</p>
+      {% endfor %}
+    </li>
+  </ul>
+  <table class="table">
+    <thead><tr><th>条件</th><th>结果</th><th>明细</th></tr></thead>
+    <tbody>
+      {% for c in etf.timing.live.checks %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{% if c.ok %}通过{% else %}未过{% endif %}</td>
+        <td class="tiny">{{ c.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if etf.timing.trades %}
+  <h3 class="subh">该票历史加仓→减仓（一年回测）</h3>
+  <table class="table">
+    <thead><tr><th>加仓</th><th>减仓</th><th>收益</th><th>原因摘要</th></tr></thead>
+    <tbody>
+      {% for t in etf.timing.trades|reverse %}
+      <tr>
+        <td>{{ t.entry_date }} @ {{ t.entry_price }}</td>
+        <td>{{ t.exit_date }} @ {{ t.exit_price }}</td>
+        <td class="{% if t.return_pct >= 0 %}up{% else %}down{% endif %}">{{ '%+.2f'|format(t.return_pct) }}%</td>
+        <td class="tiny">{{ (t.exit_reasons or [''])[0] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="tiny">{{ etf.timing.disclosure }}</p>
+</section>
+{% endif %}
+
+{% if etf.closes %}
+<section>
+  <h2>近半年收盘（公开日K）</h2>
+  <canvas id="priceChart" height="110"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const closes = {{ etf.closes | tojson }};
+    const ctx = document.getElementById('priceChart');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: closes.map(x => x.date),
+        datasets: [{
+          label: '收盘',
+          data: closes.map(x => x.close),
+          borderColor: '#123047',
+          backgroundColor: 'rgba(18,48,71,0.08)',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8 } },
+          y: { ticks: { maxTicksLimit: 6 } }
+        }
+      }
+    });
+  </script>
+</section>
+{% endif %}
+
+<section>
+  <h2>因子得分（public / proxy 参与加权；stub 不计入）</h2>
+  <table class="table">
+    <thead>
+      <tr><th>因子</th><th>来源</th><th>权重</th><th>得分</th><th>状态</th></tr>
+    </thead>
+    <tbody>
+      {% for f in etf.factors %}
+      <tr>
+        <td>{{ f.name or f.id }}</td>
+        <td><code>{{ f.source }}</code></td>
+        <td>{{ '%.0f'|format((f.weight or 0) * 100) }}%</td>
+        <td>{% if f.score is not none %}{{ f.score }}{% else %}—{% endif %}</td>
+        <td class="tiny">{% if f.used %}计入{% elif f.note %}{{ f.note }}{% else %}未用{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 · 星沉观察{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>择时观察 · 市场 {{ data.temperature.celsius }}°C</h1>
+    <p class="muted">{{ data.temperature.zone }} · 主路径为「何时加/减仓哪只 ETF」，非满仓配置</p>
+    <p class="tiny">{{ data.temperature.basis }}</p>
+  </div>
+  <div class="meta">
+    <div>Phase {{ data.phase or 'C+' }} · {{ data.data_policy }}</div>
+    <div>回测：{{ data.last_timing_backtest_at or "—" }}</div>
+    <div>行情：{{ data.last_snapshot_at or "—" }}</div>
+    <div>日K：{{ data.last_bars_at or "—" }}</div>
+  </div>
+</section>
+
+{% if data.timing %}
+<section>
+  <h2>规则回测门控（无未来函数）</h2>
+  <div class="ret-summary">
+    <div class="ret-pill {% if data.timing.validated %}up{% else %}down{% endif %}">
+      <span class="tiny">测试窗门控</span>
+      <strong>{% if data.timing.validated %}已通过{% else %}未通过{% endif %}</strong>
+    </div>
+    {% set y = (data.timing.by_window.get('252') if data.timing.by_window else none) %}
+    {% set h = (data.timing.by_window.get('126') if data.timing.by_window else none) %}
+    {% if y and y.metrics %}
+    <div class="ret-pill">
+      <span class="tiny">测试窗交易</span>
+      <strong>{{ y.metrics.trades or 0 }}</strong>
+    </div>
+    <div class="ret-pill">
+      <span class="tiny">胜率(收益&gt;0)</span>
+      <strong>{% if y.metrics.win_rate is not none %}{{ '%.0f'|format(y.metrics.win_rate * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill">
+      <span class="tiny">平均收益</span>
+      <strong>{% if y.metrics.avg_return is not none %}{{ '%+.2f'|format(y.metrics.avg_return) }}%{% else %}—{% endif %}</strong>
+    </div>
+    {% endif %}
+    {% if h and h.metrics %}
+    <div class="ret-pill">
+      <span class="tiny">半年测试均收益</span>
+      <strong>{% if h.metrics.avg_return is not none %}{{ '%+.2f'|format(h.metrics.avg_return) }}%{% else %}—{% endif %}</strong>
+    </div>
+    {% endif %}
+    {% if data.timing.benchmark %}
+    <div class="ret-pill">
+      <span class="tiny">红利低波买入持有</span>
+      <strong>{% if data.timing.benchmark.buy_hold_pct is not none %}{{ '%+.2f'|format(data.timing.benchmark.buy_hold_pct) }}%{% else %}—{% endif %}</strong>
+    </div>
+    {% endif %}
+  </div>
+  <p class="tiny">
+    {% if data.timing.train_universe_size %}训练池 {{ data.timing.train_universe_size }} 只 ETF（扩大样本定参）。{% endif %}
+    门控：交易≥{{ data.timing.gate.min_trades }}、
+    胜率≥{{ '%.0f'|format((data.timing.gate.min_win_rate or 0)*100) }}%（单笔收益为正计胜）、
+    均收益≥{{ data.timing.gate.min_avg_return }}%。
+    {% if not data.timing.validated %}当前<strong>未通过</strong>——规则仍不够好，今日不推加仓。{% else %}当前<strong>已通过</strong>测试窗验收。{% endif %}
+    {{ data.timing.disclosure }}
+  </p>
+
+  {% if y and y.trades %}
+  <h3 class="subh">选定规则下已完成交易（加仓→减仓，展示用）</h3>
+  <table class="table">
+    <thead>
+      <tr><th>代码</th><th>加仓日</th><th>减仓日</th><th>收益</th></tr>
+    </thead>
+    <tbody>
+      {% for t in y.trades[:12] %}
+      <tr>
+        <td><a href="/etf/{{ t.code }}">{{ t.code }}</a></td>
+        <td>{{ t.entry_date }}</td>
+        <td>{{ t.exit_date }}</td>
+        <td class="{% if t.return_pct >= 0 %}up{% else %}down{% endif %}">{{ '%+.2f'|format(t.return_pct) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section>
+  <h2>今日行动 · 加仓 {{ data.timing.add_count }} / 减仓提示 {{ data.timing.reduce_count }}</h2>
+  <ul class="alert-list">
+    {% for a in data.timing.actions %}
+      {% if a.action != 'hold' or loop.index <= 6 %}
+      <li class="alert alert-{% if a.action=='add' %}risk{% elif a.action=='reduce' %}watch{% else %}info{% endif %}">
+        <div class="card-top">
+          <strong><a href="/etf/{{ a.code }}">{{ a.name }}</a> · {{ a.action_label }}</strong>
+          <span class="lamp">{{ a.action }}</span>
+        </div>
+        <p class="tiny">as_of {{ a.as_of }} · 适配度 {{ a.fitness }}
+          {% if a.code_backtest and a.code_backtest.trades %}
+          · 该票一年 {{ a.code_backtest.trades }} 笔
+          {% if a.code_backtest.avg_return is not none %}均收益 {{ '%+.1f'|format(a.code_backtest.avg_return) }}%{% endif %}
+          {% endif %}
+        </p>
+        {% for r in a.reasons[:4] %}
+        <p class="tiny">· {{ r }}</p>
+        {% endfor %}
+        {% for b in a.blockers[:3] %}
+        <p class="tiny">× {{ b }}</p>
+        {% endfor %}
+      </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if data.alerts %}
+<section>
+  <h2>预警（{{ data.alert_count }}） <a class="tiny" href="/alerts">查看全部</a></h2>
+  <ul class="alert-list">
+    {% for a in data.alerts[:4] %}
+    <li class="alert alert-{{ a.type }}">
+      <strong>{{ a.title }}</strong>
+      <span class="tiny">{{ a.detail }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section>
+  <h2>高景气赛道（10）</h2>
+  <div class="grid">
+    {% for c in data.hot %}
+    <a class="card signal-{{ c.signal }}" href="/etf/{{ c.code }}">
+      <div class="card-top">
+        <strong>{{ c.name }}</strong>
+        <span class="lamp">{{ c.timing_label or c.signal_label }}</span>
+      </div>
+      <div class="score">{{ c.score }}</div>
+      <div class="quote">{{ c.code }} · {{ c.quote_name }}</div>
+      <div class="chg {% if c.change_pct is not none and c.change_pct >= 0 %}up{% elif c.change_pct is not none %}down{% endif %}">
+        {% if c.price is not none %}{{ '%.3f'|format(c.price) }}{% else %}—{% endif %}
+        ·
+        {% if c.change_pct is not none %}{{ '%+.2f'|format(c.change_pct) }}%{% else %}—{% endif %}
+      </div>
+      <p class="tiny">{{ c.logic }}</p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>稳健配置（3）</h2>
+  <div class="grid">
+    {% for c in data.defensive %}
+    <a class="card signal-{{ c.signal }}" href="/etf/{{ c.code }}">
+      <div class="card-top">
+        <strong>{{ c.name }}</strong>
+        <span class="lamp">{{ c.timing_label or c.signal_label }}</span>
+      </div>
+      <div class="score">{{ c.score }}</div>
+      <div class="quote">{{ c.code }} · {{ c.quote_name }}</div>
+      <div class="chg {% if c.change_pct is not none and c.change_pct >= 0 %}up{% elif c.change_pct is not none %}down{% endif %}">
+        {% if c.price is not none %}{{ '%.3f'|format(c.price) }}{% else %}—{% endif %}
+        ·
+        {% if c.change_pct is not none %}{{ '%+.2f'|format(c.change_pct) }}%{% else %}—{% endif %}
+      </div>
+      <p class="tiny">{{ c.logic }}</p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+{% if data.allocation %}
+<details class="ref-box">
+  <summary>参考：满仓权重组合（非操作建议）</summary>
+  <p class="tiny">{{ data.allocation.rule }} · 高景气 {{ data.allocation.hot_pct }}% / 稳健 {{ data.allocation.defensive_pct }}%</p>
+  {% if data.allocation.returns and data.allocation.returns.stats %}
+  <p class="tiny">静态权重回测区间累计
+    {% if data.allocation.returns.stats.full_pct is not none %}{{ '%+.2f'|format(data.allocation.returns.stats.full_pct) }}%{% else %}—{% endif %}
+    · 当日 {% if data.allocation.returns.today_pct is not none %}{{ '%+.2f'|format(data.allocation.returns.today_pct) }}%{% else %}—{% endif %}
+  </p>
+  {% endif %}
+  <table class="table">
+    <thead>
+      <tr><th>标的</th><th>评分</th><th>参考权重</th></tr>
+    </thead>
+    <tbody>
+      {% for r in data.allocation.rows %}
+      <tr>
+        <td><a href="/etf/{{ r.code }}">{{ r.name }}</a></td>
+        <td>{{ r.score }}</td>
+        <td>{{ '%.2f'|format(r.weight) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+{% endblock %}
