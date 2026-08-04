@@ -135,6 +135,23 @@ class StockServerClient {
     return body;
   }
 
+  /// Kimi 风格投研报告（多年财务 / 业务结构 / SWOT / 评级）。
+  Future<Map<String, dynamic>> stockAnalysis(
+    String code, {
+    bool refresh = false,
+  }) async {
+    final resp = await _http
+        .get(
+          _uri(
+            '/api/stocks/${code.padLeft(6, '0')}/analysis',
+            refresh ? {'refresh': 'true'} : null,
+          ),
+          headers: _authHeaders,
+        )
+        .timeout(const Duration(seconds: 90));
+    return _decodeMap(resp, 'stocks/analysis');
+  }
+
   Future<Map<String, dynamic>> dashboard({bool refresh = false}) async {
     final resp = await _http
         .get(

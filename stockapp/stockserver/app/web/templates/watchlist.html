@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}自选股 · 星沉观察{% endblock %}
+{% block content %}
+{% set items = data.items or [] %}
+{% set stats = data.stats or {} %}
+
+<section class="hero">
+  <div>
+    <h1>自选股</h1>
+    <p class="muted">服务端同步的自选列表 · 点击「投资分析」查看完整投研报告</p>
+    <p class="tiny">更新于 {{ data.updated_at or '—' }} · 共 {{ items|length }} 只</p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/watchlist?refresh=1">刷新行情</a>
+  </div>
+</section>
+
+{% if stats %}
+<section>
+  <h2>自选收益概览</h2>
+  <div class="ret-summary">
+    <div class="ret-pill"><span class="tiny">持仓数</span><strong>{{ stats.count or items|length }}</strong></div>
+    <div class="ret-pill"><span class="tiny">平均收益</span>
+      <strong>{% if stats.avg_return_pct is not none %}{{ '%+.2f'|format(stats.avg_return_pct * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+    <div class="ret-pill"><span class="tiny">胜率</span>
+      <strong>{% if stats.win_rate is not none %}{{ '%.0f'|format(stats.win_rate * 100) }}%{% else %}—{% endif %}</strong>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section>
+  <h2>股票列表</h2>
+  {% if not items %}
+  <p class="muted">暂无自选。请在 App 中添加，或调用 <code>POST /api/watchlist</code>。</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>代码</th>
+        <th>名称</th>
+        <th>现价</th>
+        <th>涨跌</th>
+        <th>加入价</th>
+        <th>收益</th>
+        <th>投研报告</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in items %}
+      <tr>
+        <td>{{ s.code }}</td>
+        <td>{{ s.name }}</td>
+        <td>{% if s.price is not none %}{{ '%.2f'|format(s.price) }}{% else %}—{% endif %}</td>
+        <td class="{% if s.change_pct is not none and s.change_pct >= 0 %}up{% elif s.change_pct is not none %}down{% endif %}">
+          {% if s.change_pct is not none %}{{ '%+.2f'|format(s.change_pct) }}%{% else %}—{% endif %}
+        </td>
+        <td>{% if s.add_price is not none %}{{ '%.2f'|format(s.add_price) }}{% else %}—{% endif %}</td>
+        <td class="{% if s.return_pct is not none and s.return_pct >= 0 %}up{% elif s.return_pct is not none %}down{% endif %}">
+          {% if s.return_pct is not none %}{{ '%+.2f'|format(s.return_pct * 100) }}%{% else %}—{% endif %}
+        </td>
+        <td>
+          {% if s.asset_type == 'etf' %}
+          <span class="tiny">ETF 暂无投研报告</span>
+          {% else %}
+          <a class="btn" href="/stocks/{{ s.code }}/analysis" style="margin-top:0;padding:6px 10px">投资分析</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

@@ -312,8 +312,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                             strings: strings,
                             stocks: _sortedBySignal(equity, itemsMap),
                             emptyHint: strings.emptyWatchlist,
-                            onTap: (s) =>
-                                context.push('/watchlist/stock/${s.code}'),
+                            onTap: (s) => context.push(
+                                  '/watchlist/stock/${s.code}/analysis',
+                                ),
                             onRefresh: _onRefreshStocks,
                           ),
                           _buildGrid(

@@ -26,27 +26,58 @@ def http_port() -> int:
     return int(SETTINGS.get("port", 8787))
 
 
+def _add_ip(ips: list[str], ip: str | None) -> None:
+    if not ip or ip.startswith("127.") or ip in ips:
+        return
+    # 跳过链路本地 / 明显无效地址
+    if ip.startswith("169.254."):
+        return
+    ips.append(ip)
+
+
 def local_ipv4_addresses() -> list[str]:
+    """收集本机可达 IPv4：局域网 + Tailscale(100.x) 等，供 App 连接。"""
     ips: list[str] = []
     try:
         hostname = socket.gethostname()
         for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            if ip and not ip.startswith("127.") and ip not in ips:
-                ips.append(ip)
+            _add_ip(ips, info[4][0])
     except OSError:
         pass
-    # 额外：连一个 UDP 探测拿到出网网卡 IP
+    # 出网网卡 IP（通常是局域网）
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        _add_ip(ips, s.getsockname()[0])
         s.close()
-        if ip and not ip.startswith("127.") and ip not in ips:
-            ips.insert(0, ip)
     except OSError:
         pass
-    return ips
+    # 枚举全部全局地址（含 tailscale0 / 多网卡），避免只暴露局域网导致异网连不上
+    try:
+        import subprocess
+
+        out = subprocess.check_output(
+            ["ip", "-4", "-o", "addr", "show", "scope", "global"],
+            text=True,
+            timeout=2,
+        )
+        for line in out.splitlines():
+            parts = line.split()
+            if "inet" not in parts:
+                continue
+            cidr = parts[parts.index("inet") + 1]
+            _add_ip(ips, cidr.split("/")[0])
+    except Exception:  # noqa: BLE001
+        pass
+
+    def _rank(ip: str) -> tuple[int, str]:
+        if ip.startswith(("192.168.", "10.")) or ip.startswith("172."):
+            return (0, ip)
+        if ip.startswith("100."):  # Tailscale CGNAT
+            return (1, ip)
+        return (2, ip)
+
+    return sorted(ips, key=_rank)
 
 
 def health_payload() -> dict[str, Any]:

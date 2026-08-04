@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -82,6 +82,18 @@ async def page_etf(request: Request, code: str, refresh: bool = Query(False)) ->
     )
 
 
+@app.get("/watchlist", response_class=HTMLResponse)
+async def page_watchlist(request: Request, refresh: bool = Query(True)) -> HTMLResponse:
+    from app.services import watchlist as wl
+
+    data = await wl.list_watchlist(with_quotes=refresh)
+    return templates.TemplateResponse(
+        request,
+        "watchlist.html",
+        {"data": data},
+    )
+
+
 @app.get("/stocks", response_class=HTMLResponse)
 async def page_stocks(request: Request, refresh: bool = Query(False)) -> HTMLResponse:
     data = await stock_svc.ensure_pool(force=refresh) if refresh else stock_svc.get_cached_pool()
@@ -92,16 +104,42 @@ async def page_stocks(request: Request, refresh: bool = Query(False)) -> HTMLRes
     )
 
 
-@app.get("/stocks/{code}", response_class=HTMLResponse)
-async def page_stock_detail(request: Request, code: str) -> HTMLResponse:
-    detail = stock_svc.get_stock_detail(code)
-    if detail is None:
+@app.get("/stocks/{code}/analysis", response_class=HTMLResponse)
+async def page_stock_analysis(
+    request: Request,
+    code: str,
+    refresh: bool = Query(False),
+) -> HTMLResponse:
+    from app.services import stock_analysis as analysis_svc
+
+    try:
+        report = await analysis_svc.build_stock_analysis(code, force=refresh)
+    except ValueError:
         return templates.TemplateResponse(
             request,
             "not_found.html",
             {"code": code},
             status_code=404,
         )
+    except Exception as exc:  # noqa: BLE001
+        return templates.TemplateResponse(
+            request,
+            "not_found.html",
+            {"code": f"{code}（分析失败：{exc}）"},
+            status_code=502,
+        )
+    return templates.TemplateResponse(
+        request,
+        "stock_analysis.html",
+        {"report": report, "data": {"disclaimer": report.get("disclaimer")}},
+    )
+
+
+@app.get("/stocks/{code}", response_class=HTMLResponse)
+async def page_stock_detail(request: Request, code: str) -> HTMLResponse:
+    detail = stock_svc.get_stock_detail(code)
+    if detail is None:
+        return RedirectResponse(url=f"/stocks/{code}/analysis", status_code=302)
     return templates.TemplateResponse(
         request,
         "stock_detail.html",

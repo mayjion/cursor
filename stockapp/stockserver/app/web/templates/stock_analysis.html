@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}{{ report.name }} · 投资分析{% endblock %}
+{% block content %}
+{% set q = report.quote or {} %}
+{% set fin = report.financials or {} %}
+{% set annual = fin.annual or [] %}
+{% set biz = report.business or {} %}
+{% set val = report.valuation or {} %}
+{% set research = report.research or {} %}
+{% set rating = report.rating or {} %}
+{% set charts = report.charts or {} %}
+{% set swot = report.swot or {} %}
+{% set pstats = (report.price or {}).stats or {} %}
+{% set qc = fin.quarter_compare %}
+
+<section class="hero">
+  <div>
+    <h1>{{ report.name }} <span class="lamp">投研报告</span></h1>
+    <p class="muted">{{ report.code }} · 生成于 {{ report.as_of }}</p>
+    <p class="chg {% if q.change_pct is not none and q.change_pct >= 0 %}up{% elif q.change_pct is not none %}down{% endif %}">
+      现价 {% if q.price is not none %}{{ '%.2f'|format(q.price) }}{% else %}—{% endif %}
+      · 涨跌 {% if q.change_pct is not none %}{{ '%+.2f'|format(q.change_pct) }}%{% else %}—{% endif %}
+      · 市值 {% if q.market_cap_yi is not none %}{{ '%.1f'|format(q.market_cap_yi) }} 亿{% else %}—{% endif %}
+    </p>
+    <p class="tiny">{{ rating.action or '' }} · {{ rating.stance or '' }}</p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/stocks/{{ report.code }}/analysis?refresh=1">刷新数据</a>
+    <a class="btn" href="/api/stocks/{{ report.code }}/analysis" style="background:#3a6ea5;margin-left:8px">JSON</a>
+  </div>
+</section>
+
+<section>
+  <h2>综合评级</h2>
+  <div class="ret-summary">
+    {% for d in rating.dimensions or [] %}
+    <div class="ret-pill">
+      <span class="tiny">{{ d.name }}</span>
+      <strong>{{ d.stars }}</strong>
+      <span class="tiny">{{ d.note }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>股价走势（近两年）</h2>
+  <canvas id="priceChart" height="120"></canvas>
+  <p class="tiny">
+    区间低 {% if pstats.low_52w is not none %}{{ '%.2f'|format(pstats.low_52w) }}{% else %}—{% endif %}
+    / 高 {% if pstats.high_52w is not none %}{{ '%.2f'|format(pstats.high_52w) }}{% else %}—{% endif %}
+    · 当前位置约 {% if pstats.range_position is not none %}{{ '%.0f'|format(pstats.range_position * 100) }}{% else %}—{% endif %}% 分位
+  </p>
+</section>
+
+<section class="analysis-grid">
+  <div>
+    <h2>营业收入 vs 归母净利润</h2>
+    <canvas id="revProfitChart" height="160"></canvas>
+  </div>
+  <div>
+    <h2>毛利率 vs 净利率</h2>
+    <canvas id="marginChart" height="160"></canvas>
+  </div>
+  <div>
+    <h2>业务结构</h2>
+    <canvas id="bizPieChart" height="160"></canvas>
+  </div>
+  <div>
+    <h2>各业务同比增速</h2>
+    <canvas id="bizYoyChart" height="160"></canvas>
+  </div>
+</section>
+
+<section>
+  <h2>年度财务趋势</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>年份</th><th>营收(亿)</th><th>归母净利(亿)</th><th>毛利率</th><th>净利率</th><th>ROE</th><th>营收同比</th><th>净利同比</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in annual %}
+      <tr>
+        <td>{{ (a.report_date or '')[:4] }}</td>
+        <td>{% if a.revenue_yi is not none %}{{ '%.2f'|format(a.revenue_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if a.net_profit_yi is not none %}{{ '%.2f'|format(a.net_profit_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if a.gross_margin is not none %}{{ '%.1f'|format(a.gross_margin) }}%{% else %}—{% endif %}</td>
+        <td>{% if a.net_margin is not none %}{{ '%.1f'|format(a.net_margin) }}%{% else %}—{% endif %}</td>
+        <td>{% if a.roe is not none %}{{ '%.1f'|format(a.roe) }}%{% else %}—{% endif %}</td>
+        <td>{% if a.revenue_yoy is not none %}{{ '%+.1f'|format(a.revenue_yoy) }}%{% else %}—{% endif %}</td>
+        <td>{% if a.profit_yoy is not none %}{{ '%+.1f'|format(a.profit_yoy) }}%{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if qc %}
+<section>
+  <h2>最新季报同比</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>指标</th>
+        <th>{{ qc.latest.report_name or qc.latest.report_date }}</th>
+        <th>{{ qc.previous.report_name or qc.previous.report_date }}</th>
+        <th>同比</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>营业收入(亿)</td>
+        <td>{% if qc.latest.revenue_yi is not none %}{{ '%.2f'|format(qc.latest.revenue_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.previous.revenue_yi is not none %}{{ '%.2f'|format(qc.previous.revenue_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.revenue_yoy is not none %}{{ '%+.1f'|format(qc.revenue_yoy * 100) }}%{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>归母净利润(亿)</td>
+        <td>{% if qc.latest.net_profit_yi is not none %}{{ '%.2f'|format(qc.latest.net_profit_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.previous.net_profit_yi is not none %}{{ '%.2f'|format(qc.previous.net_profit_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.profit_yoy is not none %}{{ '%+.1f'|format(qc.profit_yoy * 100) }}%{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>扣非净利润(亿)</td>
+        <td>{% if qc.latest.deduct_net_profit_yi is not none %}{{ '%.2f'|format(qc.latest.deduct_net_profit_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.previous.deduct_net_profit_yi is not none %}{{ '%.2f'|format(qc.previous.deduct_net_profit_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.deduct_yoy is not none %}{{ '%+.1f'|format(qc.deduct_yoy * 100) }}%{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>经营现金流(亿)</td>
+        <td>{% if qc.latest.ocf_yi is not none %}{{ '%.2f'|format(qc.latest.ocf_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.previous.ocf_yi is not none %}{{ '%.2f'|format(qc.previous.ocf_yi) }}{% else %}—{% endif %}</td>
+        <td>{% if qc.ocf_yoy is not none %}{{ '%+.1f'|format(qc.ocf_yoy * 100) }}%{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>毛利率</td>
+        <td>{% if qc.latest.gross_margin is not none %}{{ '%.2f'|format(qc.latest.gross_margin) }}%{% else %}—{% endif %}</td>
+        <td>{% if qc.previous.gross_margin is not none %}{{ '%.2f'|format(qc.previous.gross_margin) }}%{% else %}—{% endif %}</td>
+        <td>{% if qc.gross_margin_delta is not none %}{{ '%+.2f'|format(qc.gross_margin_delta) }} pct{% else %}—{% endif %}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <h2>估值与机构观点</h2>
+  <div class="ret-summary">
+    <div class="ret-pill"><span class="tiny">PE(TTM)</span><strong>{% if val.pe_ttm is not none %}{{ '%.1f'|format(val.pe_ttm) }}x{% else %}—{% endif %}</strong></div>
+    <div class="ret-pill"><span class="tiny">PB</span><strong>{% if val.pb_mrq is not none %}{{ '%.2f'|format(val.pb_mrq) }}x{% else %}—{% endif %}</strong></div>
+    <div class="ret-pill"><span class="tiny">PS</span><strong>{% if val.ps_ttm is not none %}{{ '%.2f'|format(val.ps_ttm) }}x{% else %}—{% endif %}</strong></div>
+    <div class="ret-pill"><span class="tiny">目标价中位</span><strong>{% if research.target_median is not none %}{{ '%.2f'|format(research.target_median) }}{% else %}—{% endif %}</strong></div>
+    <div class="ret-pill"><span class="tiny">上行空间</span><strong>{% if research.upside is not none %}{{ '%+.0f'|format(research.upside * 100) }}%{% else %}—{% endif %}</strong></div>
+    <div class="ret-pill"><span class="tiny">近1年研报</span><strong>{{ research.report_count or 0 }}</strong></div>
+  </div>
+  {% if research.rating_dist %}
+  <h3 class="subh">近1个月机构评级</h3>
+  <canvas id="ratingChart" height="90"></canvas>
+  {% endif %}
+  {% if research.reports %}
+  <h3 class="subh">近期研报</h3>
+  <table class="table">
+    <thead><tr><th>日期</th><th>机构</th><th>评级</th><th>目标/隐含</th><th>标题</th></tr></thead>
+    <tbody>
+      {% for r in research.reports[:8] %}
+      <tr>
+        <td>{{ r.publish_date or '—' }}</td>
+        <td>{{ r.org or '—' }}</td>
+        <td>{{ r.rating or '—' }}</td>
+        <td>{% if r.target_price is not none %}{{ '%.2f'|format(r.target_price) }}{% else %}—{% endif %}</td>
+        <td class="tiny">{{ r.title or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section>
+  <h2>SWOT</h2>
+  <div class="swot-grid">
+    <div class="swot s"><h3>S 优势</h3><ul>{% for x in swot.strengths or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    <div class="swot w"><h3>W 劣势</h3><ul>{% for x in swot.weaknesses or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    <div class="swot o"><h3>O 机会</h3><ul>{% for x in swot.opportunities or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    <div class="swot t"><h3>T 威胁</h3><ul>{% for x in swot.threats or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>投资逻辑与风险</h2>
+  <div class="analysis-grid">
+    <div class="card">
+      <h3 class="subh">关注催化</h3>
+      <ul>{% for x in report.catalysts or [] %}<li>{{ x }}</li>{% endfor %}</ul>
+    </div>
+    <div class="card">
+      <h3 class="subh">主要风险</h3>
+      <ul>{% for x in report.risks or [] %}<li>{{ x }}</li>{% endfor %}</ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>文字解读</h2>
+  {% for sec in report.sections or [] %}
+  <article class="narrative">
+    <h3>{{ sec.title }}</h3>
+    <p>{{ sec.body }}</p>
+  </article>
+  {% endfor %}
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const charts = {{ charts | tojson }};
+const commonOpts = {
+  plugins: { legend: { position: 'bottom' } },
+  scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { ticks: { maxTicksLimit: 6 } } }
+};
+
+new Chart(document.getElementById('priceChart'), {
+  type: 'line',
+  data: {
+    labels: charts.price_dates || [],
+    datasets: [{
+      label: '收盘',
+      data: charts.price_close || [],
+      borderColor: '#1f6feb',
+      backgroundColor: 'rgba(31,111,235,0.12)',
+      fill: true, tension: 0.15, pointRadius: 0
+    }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: commonOpts.scales }
+});
+
+new Chart(document.getElementById('revProfitChart'), {
+  type: 'bar',
+  data: {
+    labels: charts.annual_years || [],
+    datasets: [
+      { label: '营收(亿)', data: charts.annual_revenue_yi || [], backgroundColor: '#3a6ea5' },
+      { label: '净利(亿)', data: charts.annual_profit_yi || [], backgroundColor: '#1b7f4a' }
+    ]
+  },
+  options: commonOpts
+});
+
+new Chart(document.getElementById('marginChart'), {
+  type: 'line',
+  data: {
+    labels: charts.annual_years || [],
+    datasets: [
+      { label: '毛利率%', data: charts.annual_gross_margin || [], borderColor: '#b42318', tension: 0.2 },
+      { label: '净利率%', data: charts.annual_net_margin || [], borderColor: '#6b4fbb', tension: 0.2 }
+    ]
+  },
+  options: commonOpts
+});
+
+new Chart(document.getElementById('bizPieChart'), {
+  type: 'doughnut',
+  data: {
+    labels: charts.biz_names || [],
+    datasets: [{
+      data: charts.biz_ratios || [],
+      backgroundColor: ['#3a6ea5','#1b7f4a','#c47a1a','#6b4fbb','#5c6b7a']
+    }]
+  },
+  options: { plugins: { legend: { position: 'bottom' } } }
+});
+
+new Chart(document.getElementById('bizYoyChart'), {
+  type: 'bar',
+  data: {
+    labels: charts.biz_names || [],
+    datasets: [{
+      label: '同比%',
+      data: charts.biz_yoys || [],
+      backgroundColor: (charts.biz_yoys || []).map(v => (v || 0) >= 0 ? '#1b7f4a' : '#b42318')
+    }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxRotation: 40 } } } }
+});
+
+{% if research.rating_dist %}
+new Chart(document.getElementById('ratingChart'), {
+  type: 'bar',
+  data: {
+    labels: charts.rating_labels || [],
+    datasets: [{
+      label: '家数',
+      data: charts.rating_values || [],
+      backgroundColor: '#3a6ea5'
+    }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+});
+{% endif %}
+</script>
+{% endblock %}

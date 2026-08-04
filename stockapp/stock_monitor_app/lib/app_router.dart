@@ -6,6 +6,7 @@ import 'features/insights/insights_screen.dart';
 import 'features/recommendations/recommendations_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/main_shell.dart';
+import 'features/stock_detail/stock_analysis_screen.dart';
 import 'features/stock_detail/stock_detail_screen.dart';
 import 'features/watchlist/watchlist_screen.dart';
 
@@ -28,6 +29,15 @@ final goRouter = GoRouter(
                     final code = state.pathParameters['code']!;
                     return StockDetailScreen(code: code);
                   },
+                  routes: [
+                    GoRoute(
+                      path: 'analysis',
+                      builder: (context, state) {
+                        final code = state.pathParameters['code']!;
+                        return StockAnalysisScreen(code: code);
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -82,6 +92,15 @@ final goRouter = GoRouter(
                     final code = state.pathParameters['code']!;
                     return StockDetailScreen(code: code);
                   },
+                  routes: [
+                    GoRoute(
+                      path: 'analysis',
+                      builder: (context, state) {
+                        final code = state.pathParameters['code']!;
+                        return StockAnalysisScreen(code: code);
+                      },
+                    ),
+                  ],
                 ),
                 GoRoute(
                   path: 'etf/:code',

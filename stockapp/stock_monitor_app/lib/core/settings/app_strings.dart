@@ -171,6 +171,15 @@ class AppStrings {
   String get tabFundamentals => isZh ? '基本面' : 'Fundamentals';
   String get tabTechnical => isZh ? '技术面' : 'Technical';
   String get tabNews => isZh ? '资讯' : 'News';
+  String get tabAnalysis => isZh ? '投研' : 'Analysis';
+  String get analysisNeedServer =>
+      isZh ? '投研报告需连接 stockserver 后查看' : 'Connect stockserver for analysis';
+  String get analysisRefresh => isZh ? '刷新报告' : 'Refresh report';
+  String get analysisSwot => isZh ? 'SWOT' : 'SWOT';
+  String get analysisRating => isZh ? '综合评级' : 'Rating';
+  String get analysisStance => isZh ? '操作参考' : 'Stance';
+  String get analysisDisclaimer =>
+      isZh ? '仅供研究参考，不构成投资建议' : 'For research only, not advice';
   String get conceptsSection => isZh ? '概念题材' : 'Themes';
   String get companyProfileSection => isZh ? '公司简介' : 'Profile';
   String get refreshNews => isZh ? '刷新资讯' : 'Refresh news';
@@ -257,7 +266,9 @@ class AppStrings {
       : 'Auto-discover on LAN, or enter PC IP (port 8787). Password required on first connect';
   String get serverEnable => isZh ? '使用 stockserver' : 'Use stockserver';
   String get serverHostLabel => isZh ? '服务端 IP / 主机名' : 'Server IP / host';
-  String get serverHostHint => isZh ? '例如 192.168.1.8' : 'e.g. 192.168.1.8';
+  String get serverHostHint => isZh
+      ? '同网填局域网IP；异网填 Tailscale IP（如 100.x.x.x）'
+      : 'LAN IP on same Wi‑Fi; Tailscale IP (100.x) otherwise';
   String get serverPortLabel => isZh ? '端口' : 'Port';
   String get serverPasswordLabel => isZh ? '连接密码' : 'Password';
   String get serverPasswordHint => isZh ? '首次连接时输入' : 'Required on first connect';

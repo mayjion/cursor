@@ -204,3 +204,37 @@ final serverStockPoolProvider =
   if (!conn.connected || client == null) return null;
   return client.stockPool();
 });
+
+/// 个股投研报告（需已连接 stockserver）。
+class StockAnalysisNotifier
+    extends AutoDisposeFamilyAsyncNotifier<Map<String, dynamic>?, String> {
+  @override
+  Future<Map<String, dynamic>?> build(String arg) async {
+    final conn = ref.watch(serverConnectionProvider);
+    final client = ref.watch(stockServerClientProvider);
+    if (!conn.connected || client == null) return null;
+    return client.stockAnalysis(arg);
+  }
+
+  /// 强制向服务端拉最新报告（绕过服务端缓存）。
+  Future<void> reload() async {
+    final conn = ref.read(serverConnectionProvider);
+    final client = ref.read(stockServerClientProvider);
+    if (client == null || !conn.connected) {
+      state = AsyncError(
+        Exception('请先在设置中连接 stockserver'),
+        StackTrace.current,
+      );
+      return;
+    }
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => client.stockAnalysis(arg, refresh: true),
+    );
+  }
+}
+
+final stockAnalysisProvider = AsyncNotifierProvider.autoDispose
+    .family<StockAnalysisNotifier, Map<String, dynamic>?, String>(
+  StockAnalysisNotifier.new,
+);

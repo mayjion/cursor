@@ -107,10 +107,21 @@ final watchlistItemsProvider =
 });
 
 Future<void> refreshAllWatchlist(WidgetRef ref) async {
-  final stocks = await ref.read(watchlistProvider.future);
+  final conn = ref.read(serverConnectionProvider);
+  if (!conn.connected) {
+    throw WatchlistServerException('请先在设置中连接 stockserver');
+  }
+
+  List<WatchStock> stocks;
+  try {
+    stocks = await ref.read(watchlistProvider.future);
+  } catch (_) {
+    final payload = await WatchlistRepository.fetchWidget(ref, refresh: true);
+    stocks = payload.items;
+  }
+
   final engine = ref.read(positionSignalEngineProvider);
   final settings = ref.read(appSettingsProvider);
-
   final equity = stocks.where((s) => s.assetType == AssetType.stock).toList();
 
   for (var i = 0; i < equity.length; i++) {
@@ -126,9 +137,9 @@ Future<void> refreshAllWatchlist(WidgetRef ref) async {
     }
   }
 
-  ref.invalidate(watchlistPayloadProvider);
-  ref.invalidate(watchlistProvider);
-  ref.invalidate(watchlistStatsProvider);
+  // 用 refresh 拉取最新自选，避免 invalidate 后 future 竞态导致“刷新失败”
+  final payload = await ref.refresh(watchlistPayloadProvider.future);
+  WatchlistStorage.setCache(payload.items);
   ref.invalidate(watchlistItemsProvider);
   ref.invalidate(positionSignalListProvider);
   ref.invalidate(positionSignalSummaryProvider);

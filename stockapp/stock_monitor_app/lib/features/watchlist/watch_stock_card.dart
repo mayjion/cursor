@@ -92,10 +92,20 @@ class WatchStockCard extends ConsumerWidget {
                               ),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
-                              materialTapTargetSize:
+                                  materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                             ),
                           ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            strings.isZh ? '点击查看投研报告' : 'Tap for analysis',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

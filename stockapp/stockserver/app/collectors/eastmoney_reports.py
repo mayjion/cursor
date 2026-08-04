@@ -145,6 +145,87 @@ async def fetch_reports_with_targets(
     return out
 
 
+async def fetch_reports_for_code(
+    code: str,
+    *,
+    days: int = 365,
+    page_size: int = 50,
+    max_pages: int = 6,
+) -> list[dict[str, Any]]:
+    """单只股票近 N 日研报（含评级与预测字段）。"""
+    code = str(code).zfill(6)
+    begin = (date.today() - timedelta(days=days)).isoformat()
+    end = date.today().isoformat()
+    gap = float(SETTINGS.get("request_gap_ms", 120)) / 1000.0
+    out: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(headers=_HEADERS) as client:
+        for page in range(1, max_pages + 1):
+            params = {
+                "industryCode": "*",
+                "pageNo": page,
+                "pageSize": page_size,
+                "code": code,
+                "industry": "*",
+                "rating": "*",
+                "ratingChange": "*",
+                "beginTime": begin,
+                "endTime": end,
+                "fields": "",
+                "qType": 0,
+            }
+            data: list[Any] = []
+            for attempt in range(3):
+                try:
+                    resp = await client.get(
+                        "https://reportapi.eastmoney.com/report/list",
+                        params=params,
+                        timeout=30.0,
+                    )
+                    resp.raise_for_status()
+                    body = resp.json()
+                    data = body.get("data") or []
+                    break
+                except Exception:  # noqa: BLE001
+                    await asyncio.sleep(0.4 * (attempt + 1))
+            if not data:
+                break
+            for row in data:
+                if not isinstance(row, dict):
+                    continue
+                row_code = str(row.get("stockCode") or "").zfill(6)
+                if row_code != code:
+                    continue
+                aim_t = _f(row.get("indvAimPriceT"))
+                aim_l = _f(row.get("indvAimPriceL"))
+                aim = aim_t or aim_l
+                implied = _implied_from_predict(row)
+                out.append(
+                    {
+                        "code": code,
+                        "name": str(row.get("stockName") or code),
+                        "title": str(row.get("title") or ""),
+                        "org": str(row.get("orgSName") or row.get("orgName") or ""),
+                        "publish_date": _day(row.get("publishDate")),
+                        "aim_price": aim,
+                        "implied_price": implied,
+                        "target_price": aim or implied,
+                        "target_source": "aim" if aim is not None else ("implied" if implied else None),
+                        "predict_this_eps": _f(row.get("predictThisYearEps")),
+                        "predict_this_pe": _f(row.get("predictThisYearPe")),
+                        "predict_next_eps": _f(row.get("predictNextYearEps")),
+                        "predict_next_pe": _f(row.get("predictNextYearPe")),
+                        "rating": str(row.get("emRatingName") or row.get("sRatingName") or ""),
+                        "info_code": str(row.get("infoCode") or ""),
+                    }
+                )
+            if len(data) < page_size:
+                break
+            if gap:
+                await asyncio.sleep(gap)
+    return out
+
+
 def aggregate_targets_by_code(
     reports: list[dict[str, Any]],
     *,

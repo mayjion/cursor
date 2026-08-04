@@ -17,6 +17,7 @@ import '../../core/storage/flow_cache_storage.dart';
 import '../../core/storage/position_signal_storage.dart';
 import '../../core/api/watchlist_repository.dart';
 import 'flow_charts.dart';
+import 'stock_analysis_screen.dart';
 
 class StockDetailScreen extends ConsumerStatefulWidget {
   const StockDetailScreen({super.key, required this.code});
@@ -40,7 +41,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _load();
   }
 
@@ -157,6 +158,15 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
         ),
         actions: [
           IconButton(
+            tooltip: strings.tabAnalysis,
+            icon: const Icon(Icons.analytics_outlined),
+            onPressed: () {
+              if (_tabController.index != 4) {
+                _tabController.animateTo(4);
+              }
+            },
+          ),
+          IconButton(
             icon: Icon(_inWatchlist ? Icons.star : Icons.star_outline),
             tooltip: _inWatchlist
                 ? strings.removeFromWatchlist
@@ -172,6 +182,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
             Tab(text: strings.tabFundamentals),
             Tab(text: strings.tabTechnical),
             Tab(text: strings.tabNews),
+            Tab(text: strings.tabAnalysis),
           ],
         ),
       ),
@@ -216,6 +227,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen>
                   newsAsync: newsAsync,
                   strings: strings,
                 ),
+                StockAnalysisBody(code: widget.code),
               ],
             ),
     );

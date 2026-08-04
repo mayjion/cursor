@@ -172,8 +172,50 @@ h2 { font-size: 18px; margin: 0 0 12px; }
   font-size: 12px;
 }
 
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.analysis-grid > div {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+.swot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.swot {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.swot h3 { margin: 0 0 8px; font-size: 15px; }
+.swot ul { margin: 0; padding-left: 18px; }
+.swot li { margin: 4px 0; font-size: 13px; line-height: 1.45; }
+.swot.s { border-top: 3px solid var(--green); }
+.swot.w { border-top: 3px solid var(--red); }
+.swot.o { border-top: 3px solid #3a6ea5; }
+.swot.t { border-top: 3px solid var(--yellow); }
+.narrative {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.narrative h3 { margin: 0 0 8px; font-size: 16px; }
+.narrative p { margin: 0; white-space: pre-wrap; line-height: 1.6; color: #24303a; font-size: 14px; }
+
 @media (max-width: 720px) {
   .hero { flex-direction: column; }
   .meta { text-align: left; }
   nav a { margin-left: 10px; font-size: 12px; }
+  .analysis-grid, .swot-grid { grid-template-columns: 1fr; }
 }

@@ -93,6 +93,21 @@ async def api_stock_pool(refresh: bool = Query(False)) -> dict:
     return stock_svc.get_cached_pool()
 
 
+@router.get("/stocks/{code}/analysis")
+async def api_stock_analysis(
+    code: str,
+    refresh: bool = Query(False),
+) -> dict:
+    from app.services import stock_analysis as analysis_svc
+
+    try:
+        return await analysis_svc.build_stock_analysis(code, force=refresh)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"analysis failed: {exc}") from exc
+
+
 @router.get("/stocks/{code}")
 async def api_stock_detail(code: str) -> dict:
     detail = stock_svc.get_stock_detail(code)

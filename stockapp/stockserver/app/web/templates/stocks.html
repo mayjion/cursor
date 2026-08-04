@@ -59,7 +59,7 @@
         <td>{{ s.insider_events or 0 }}</td>
         <td>{{ s.report_count or 0 }}</td>
         <td><span class="lamp signal-{{ s.signal }}">{{ s.score }}</span></td>
-        <td><a href="/stocks/{{ s.code }}">分析</a></td>
+        <td><a href="/stocks/{{ s.code }}/analysis">投资分析</a></td>
       </tr>
       {% endfor %}
     </tbody>
