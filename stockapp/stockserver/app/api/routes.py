@@ -5,6 +5,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from app.auth import verify_app_password
 from app.config import SETTINGS, reload_configs
 from app.services import dashboard as dash
+from app.services import limitup_board as limitup_svc
 from app.services import stock_screen as stock_svc
 
 router = APIRouter(prefix="/api")
@@ -91,6 +92,13 @@ async def api_stock_pool(refresh: bool = Query(False)) -> dict:
     if refresh:
         return await stock_svc.ensure_pool(force=True)
     return stock_svc.get_cached_pool()
+
+
+@router.get("/boards/limitup")
+async def api_limitup_board(refresh: bool = Query(False)) -> dict:
+    if refresh:
+        return await limitup_svc.ensure_board(force=True)
+    return limitup_svc.get_cached_board()
 
 
 @router.get("/stocks/{code}/analysis")
@@ -196,6 +204,21 @@ async def admin_stock_screen(x_admin_token: str | None = Header(default=None)) -
     return {
         "ok": True,
         "pool_n": len(result.get("pool") or []),
+        "stats": result.get("stats"),
+        "updated_at": result.get("updated_at"),
+    }
+
+
+@router.post("/admin/limitup-board")
+async def admin_limitup_board(x_admin_token: str | None = Header(default=None)) -> dict:
+    expected = SETTINGS.get("admin_token") or ""
+    if expected and x_admin_token != expected:
+        raise HTTPException(status_code=401, detail="invalid admin token")
+    result = await limitup_svc.ensure_board(force=True)
+    return {
+        "ok": True,
+        "focus_n": len(result.get("focus") or []),
+        "watch_n": len(result.get("watch") or []),
         "stats": result.get("stats"),
         "updated_at": result.get("updated_at"),
     }

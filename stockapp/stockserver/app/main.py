@@ -15,6 +15,7 @@ from app.db.store import init_db
 from app.discovery.beacon import start_discovery_beacon, stop_discovery_beacon
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.services import dashboard as dash
+from app.services import limitup_board as limitup_svc
 from app.services import stock_screen as stock_svc
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -100,6 +101,20 @@ async def page_stocks(request: Request, refresh: bool = Query(False)) -> HTMLRes
     return templates.TemplateResponse(
         request,
         "stocks.html",
+        {"data": data},
+    )
+
+
+@app.get("/limitup", response_class=HTMLResponse)
+async def page_limitup(request: Request, refresh: bool = Query(False)) -> HTMLResponse:
+    data = (
+        await limitup_svc.ensure_board(force=True)
+        if refresh
+        else limitup_svc.get_cached_board()
+    )
+    return templates.TemplateResponse(
+        request,
+        "limitup.html",
         {"data": data},
     )
 

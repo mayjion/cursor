@@ -106,6 +106,12 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
       appBar: AppBar(
         title: Text(strings.recTitle),
         actions: [
+          if (useServer)
+            IconButton(
+              icon: const Icon(Icons.local_fire_department_outlined),
+              tooltip: '涨停观察榜',
+              onPressed: () => context.push('/limitup'),
+            ),
           IconButton(
             icon: isRunning || (useServer && serverPool.isLoading)
                 ? const SizedBox(
@@ -124,11 +130,27 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
           if (useServer)
             Material(
               color: Theme.of(context).colorScheme.secondaryContainer,
-              child: ListTile(
-                dense: true,
-                leading: const Icon(Icons.cloud_done_outlined),
-                title: Text(strings.serverPoolBanner),
-                subtitle: Text(conn.baseUrl ?? ''),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.cloud_done_outlined),
+                    title: Text(strings.serverPoolBanner),
+                    subtitle: Text(conn.baseUrl ?? ''),
+                  ),
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.local_fire_department,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text('涨停观察榜'),
+                    subtitle: const Text('重点池 / 观察池 · 点此查看'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/limitup'),
+                  ),
+                ],
               ),
             )
           else

@@ -115,6 +115,27 @@ class StockServerClient {
     return body;
   }
 
+  /// 涨停观察榜（重点池 + 观察池）。
+  Future<Map<String, dynamic>> limitupBoard({bool refresh = false}) async {
+    final resp = await _http
+        .get(
+          _uri('/api/boards/limitup', refresh ? {'refresh': 'true'} : null),
+          headers: _authHeaders,
+        )
+        .timeout(Duration(seconds: refresh ? 180 : 30));
+    if (resp.statusCode == 401) {
+      throw Exception('密码错误或未授权');
+    }
+    if (resp.statusCode != 200) {
+      throw Exception('boards/limitup HTTP ${resp.statusCode}');
+    }
+    final body = jsonDecode(resp.body);
+    if (body is! Map<String, dynamic>) {
+      throw Exception('invalid limitup board payload');
+    }
+    return body;
+  }
+
   Future<Map<String, dynamic>> stockDetail(String code) async {
     final resp = await _http
         .get(

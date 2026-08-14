@@ -5,6 +5,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.services import dashboard as dash
+from app.services import limitup_board as limitup_svc
 from app.services import stock_screen as stock_svc
 
 logger = logging.getLogger("stockserver.jobs")
@@ -31,6 +32,19 @@ async def _daily_stock_screen() -> None:
         logger.exception("stock screen failed")
 
 
+async def _daily_limitup_board() -> None:
+    try:
+        result = await limitup_svc.ensure_board(force=True)
+        logger.info(
+            "limitup board done: focus=%s watch=%s stats=%s",
+            len(result.get("focus") or []),
+            len(result.get("watch") or []),
+            result.get("stats"),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("limitup board failed")
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -42,6 +56,8 @@ def start_scheduler() -> AsyncIOScheduler:
     sched.add_job(_daily_collect, "cron", hour=11, minute=35, id="midday_collect")
     # A股初选推荐池（收盘后）
     sched.add_job(_daily_stock_screen, "cron", hour=16, minute=30, id="daily_stock_screen")
+    # 涨停观察榜（收盘后）
+    sched.add_job(_daily_limitup_board, "cron", hour=16, minute=40, id="daily_limitup_board")
     sched.start()
     _scheduler = sched
     logger.info("scheduler started")

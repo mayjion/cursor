@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}涨停观察榜 · 星沉观察{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>涨停观察榜</h1>
+    <p class="muted">
+      市值&gt;{{ data.cfg.min_market_cap_yi or 100 }}亿 · 涨停日信号 ·
+      观察池主力/市值≥{{ '%.1f'|format((data.cfg.watch_flow_to_mcap or 0.005)*100) }}% ·
+      重点池≥{{ '%.1f'|format((data.cfg.focus_flow_to_mcap or 0.008)*100) }}%
+    </p>
+    <p class="tiny">
+      入场：涨停次日最低价 · {{ data.cfg.forward_days or 10 }}日最高价目标≥{{ '%.0f'|format((data.cfg.target_ret or 0.1)*100) }}%
+      （底线{{ '%.0f'|format((data.cfg.floor_ret or 0.08)*100) }}%）· {{ data.updated_at or "尚未跑过" }}
+    </p>
+  </div>
+  <div class="meta">
+    <a class="btn" href="/limitup?refresh=1">重新筛选</a>
+    <a class="btn" href="/api/boards/limitup">JSON</a>
+  </div>
+</section>
+
+<section>
+  <h2>筛选统计</h2>
+  <div class="ret-summary">
+    <div class="ret-pill"><span class="tiny">候选</span><strong>{{ data.stats.candidates or 0 }}</strong></div>
+    <div class="ret-pill"><span class="tiny">重点池</span><strong>{{ data.stats.focus_n or 0 }}</strong></div>
+    <div class="ret-pill"><span class="tiny">观察池</span><strong>{{ data.stats.watch_n or 0 }}</strong></div>
+    <div class="ret-pill"><span class="tiny">未过筛</span><strong>{{ data.stats.rejected_n or 0 }}</strong></div>
+  </div>
+  {% if data.disclosure %}
+  <p class="tiny muted">{{ data.disclosure }}</p>
+  {% endif %}
+</section>
+
+{% macro pool_table(title, rows) %}
+<section>
+  <h2>{{ title }}（{{ rows|length }}）</h2>
+  {% if not rows %}
+  <p class="muted">暂无。可点「重新筛选」跑一轮。</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>代码</th>
+        <th>名称</th>
+        <th>涨停日</th>
+        <th>涨幅%</th>
+        <th>市值亿</th>
+        <th>主力/市值</th>
+        <th>放量比</th>
+        <th>评分</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in rows %}
+      <tr>
+        <td>{{ s.code }}</td>
+        <td>{{ s.name }}</td>
+        <td>{{ s.signal_date }}</td>
+        <td>{{ '%.2f'|format(s.signal_chg or 0) }}</td>
+        <td>{{ '%.0f'|format(s.market_cap_yi or 0) }}</td>
+        <td>{{ '%.2f'|format((s.flow_to_mcap or 0)*100) }}%</td>
+        <td>{{ '%.2f'|format(s.vol_ma_ratio or 0) }}</td>
+        <td>{{ '%.0f'|format(s.score or 0) }}</td>
+        <td><a href="/stocks/{{ s.code }}/analysis">投研</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{{ pool_table('重点池', data.focus or []) }}
+{{ pool_table('观察池', data.watch or []) }}
+{% endblock %}

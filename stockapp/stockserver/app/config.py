@@ -64,4 +64,8 @@ def stock_screen_cfg() -> dict[str, Any]:
     return load_yaml("stock_screen.yaml")
 
 
+def limitup_board_cfg() -> dict[str, Any]:
+    return load_yaml("limitup_board.yaml")
+
+
 SETTINGS = settings()

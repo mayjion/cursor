@@ -1,0 +1,43 @@
+# 涨停观察榜（T+1 最低价口径冻结标准）
+version: 1
+
+min_market_cap_yi: 100
+exclude_st: true
+exclude_bj: true
+
+# 信号日前窗口
+flow_window: 10
+min_vol_ma_ratio: 1.1
+max_vol_ma_ratio: 0          # 0=不设上限；重点池加严可用 1.6
+min_up_days_in_5: 3
+reject_pulse_fake: true
+pulse_spike: 3.0
+require_flow_sum_positive: true
+
+# 分池门槛（10日主力净流入 / 总市值）
+watch_flow_to_mcap: 0.005    # 观察池 ≥0.5%
+focus_flow_to_mcap: 0.008    # 重点池 ≥0.8%
+
+# 重点池可选加严（冲 12%~15% 目标时）
+focus_require_vol_band: false
+focus_vol_min: 1.2
+focus_vol_max: 1.6
+focus_require_flow_accel: false
+
+# 交易叙事（展示用，非实盘下单）
+entry_mode: t1_low
+forward_days: 10
+target_ret: 0.10             # 主卖出线 10%
+floor_ret: 0.08              # 底线 8%
+
+# 候选拉取
+zt_pool_pagesize: 200
+max_candidates: 120
+request_gap_ms: 200
+
+disclosure: >
+  硬条件：市值>100亿、非ST、非北交、信号日涨停、前10日主力累计>0、
+  近5均量/前5均量≥1.1（剔脉冲假放量）。
+  观察池：10日主力/市值≥0.5%；重点池：≥0.8%。
+  入场叙事：涨停次日最低价；观察窗含买入日共10个交易日最高价；
+  主目标涨幅≥10%（底线≥8%）。仅供个人研究，不构成投资建议。

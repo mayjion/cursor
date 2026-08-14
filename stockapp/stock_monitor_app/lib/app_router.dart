@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'features/etf_detail/etf_detail_screen.dart';
 import 'features/etf_overview/etf_overview_screen.dart';
 import 'features/insights/insights_screen.dart';
+import 'features/limitup/limitup_board_screen.dart';
 import 'features/recommendations/recommendations_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/main_shell.dart';
@@ -23,6 +24,10 @@ final goRouter = GoRouter(
               path: '/',
               builder: (context, state) => const RecommendationsScreen(),
               routes: [
+                GoRoute(
+                  path: 'limitup',
+                  builder: (context, state) => const LimitupBoardScreen(),
+                ),
                 GoRoute(
                   path: 'stock/:code',
                   builder: (context, state) {

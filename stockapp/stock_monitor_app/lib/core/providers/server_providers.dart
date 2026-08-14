@@ -205,6 +205,15 @@ final serverStockPoolProvider =
   return client.stockPool();
 });
 
+/// 涨停观察榜（重点池 / 观察池）。
+final serverLimitupBoardProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final conn = ref.watch(serverConnectionProvider);
+  final client = ref.watch(stockServerClientProvider);
+  if (!conn.connected || client == null) return null;
+  return client.limitupBoard();
+});
+
 /// 个股投研报告（需已连接 stockserver）。
 class StockAnalysisNotifier
     extends AutoDisposeFamilyAsyncNotifier<Map<String, dynamic>?, String> {

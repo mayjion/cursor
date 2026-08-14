@@ -10,7 +10,9 @@ class MainShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   static bool _hideBottomBar(String path) {
-    return path.contains('/stock/') || path.contains('/etf/');
+    return path.contains('/stock/') ||
+        path.contains('/etf/') ||
+        path.contains('/limitup');
   }
 
   @override
